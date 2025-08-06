@@ -80,10 +80,9 @@ jobs:
         run: |
           ROOT_PATH="${{ github.workspace }}"
           echo "ROOT_PATH=$ROOT_PATH"
-          docker pull ghcr.io/synocommunity/spksrc
+          docker pull ghcr.io/synocommunity/spksrc:latest
           ls -al ${ROOT_PATH}/spksrc
           docker run \
-            --cache-from ghcr.io/synocommunity/spksrc:latest \
             -v ${ROOT_PATH}/spksrc:/spksrc \
             -v ${ROOT_PATH}/.:/spksrc/spk/. \
             -w /spksrc/spk/. \
