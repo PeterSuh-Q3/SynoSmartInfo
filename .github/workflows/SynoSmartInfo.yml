@@ -87,7 +87,7 @@ jobs:
             -v ${ROOT_PATH}/.:/spksrc/spk/. \
             -w /spksrc/spk/. \
             ghcr.io/synocommunity/spksrc \
-            make arch-${{ matrix.target }}
+            make ${{ matrix.target }}
       
       # 8. Upload build artifacts
       - name: Upload to Artifacts
