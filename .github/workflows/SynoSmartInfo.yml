@@ -84,7 +84,7 @@ jobs:
       - name: Build Package via make
         run: |
           cd spksrc
-          make arch-${{ matrix.target }}
+          make spk-Synosmartinfo-${{ matrix.target }}
           cd ../../..
 
       # 9. Upload build artifacts
