@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - "*"
-
   workflow_dispatch:
     inputs:
       spksrc:
@@ -19,82 +18,92 @@ on:
         description: "pre release"
         default: false
         type: boolean
-        
+
 jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         target:
-        - "x64-7.0"
-        - "x64-7.1"        
-        - "x64-7.2"
-        
+          - "x64-7.0"
+          - "x64-7.1"
+          - "x64-7.2"
+
     steps:
-        - name: Checkout
-          uses: actions/checkout@v4
+      # 1. Checkout repository
+      - name: Checkout
+        uses: actions/checkout@v4
 
-        # 2. spksrc source cache
-        - name: Cache spksrc source
-          uses: actions/cache@v3
-          with:
-            path: spksrc
-            key: spksrc-${{ runner.os }}-${{ hashFiles('spksrc/**') }}
-            restore-keys: |
-              spksrc-${{ runner.os }}-
-  
-        # 3. Set Docker Layer Cache Directory
-        - name: Cache Docker layers
-          uses: actions/cache@v3
-          with:
-            path: /home/runner/.docker
-            key: docker-${{ runner.os }}-${{ matrix.target }}-${{ github.sha }}
-            restore-keys: |
-              docker-${{ runner.os }}-${{ matrix.target }}-
-            
-        - name: Download newest syno_smart_info.sh
-          run: |
-            curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh -o ./src/bin/syno_smart_info.sh
-            
-        - name: Init Env
-          run: |
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
-            git config --global user.name "github-actions[bot]"
+      # 2. Clone SynoCommunity spksrc
+      - name: Checkout SynoCommunity Source
+        run: |
+          git clone --depth=1 https://github.com/SynoCommunity/spksrc.git
+          if [ -n "${{ inputs.spksrc }}" ]; then
+            cd spksrc
+            git fetch --depth=1 origin "${{ inputs.spksrc }}"
+            git checkout "${{ inputs.spksrc }}"
+            cd ..
+          fi
 
-        - name: Checkout SynoCommunity Source and Docker Image
-          run: |
-            docker pull ghcr.io/synocommunity/spksrc
-            git clone --depth=1 https://github.com/SynoCommunity/spksrc.git
-  
-            if [ -n "${{ inputs.spksrc }}" ]; then
-              cd spksrc
-              git fetch --depth=1 origin "${{ inputs.spksrc }}"
-              git checkout "${{ inputs.spksrc }}"
-              cd ..
-            fi
- 
-        - name: Build Package (Docker 레이어 캐시 적용)
-          run: |
-            ROOT_PATH="${{ github.workspace }}"
-            docker run \
-              --cache-from ghcr.io/synocommunity/spksrc:latest \
-              -v ${ROOT_PATH}/spksrc:/spksrc \
-              -v ${ROOT_PATH}/rr-manager:/spksrc/spk/rr-manager \
-              -w /spksrc/spk/rr-manager \
-              ghcr.io/synocommunity/spksrc \
-              make arch-${{ matrix.target }}
-  
-        - name: Upload to Artifacts
-          uses: actions/upload-artifact@v4
-          with:
-            name: packages-${{ matrix.target }}
-            path: |
-              spksrc/packages/*.spk
-  
-        - name: Release
-          uses: softprops/action-gh-release@v1
-          if: startsWith(github.ref, 'refs/tags/')
-          with:
-            files: |
-              spksrc/packages/*.spk
-  
+      # 3. Cache spksrc source (after clone)
+      - name: Cache spksrc source
+        uses: actions/cache@v3
+        with:
+          path: spksrc
+          key: spksrc-${{ runner.os }}-${{ hashFiles('spksrc/**') }}
+          restore-keys: |
+            spksrc-${{ runner.os }}-
+
+      # 4. Cache Docker layers
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /home/runner/.docker
+          key: docker-${{ runner.os }}-${{ matrix.target }}
+          restore-keys: |
+            docker-${{ runner.os }}-${{ matrix.target }}-
+
+      # 5. Download latest syno_smart_info.sh
+      - name: Download newest syno_smart_info.sh
+        run: |
+          curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/main/syno_smart_info.sh \
+            -o ./src/bin/syno_smart_info.sh
+
+      # 6. Initialize Git environment
+      - name: Init Env
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      # 7. Build packages (rr-manager & python311) with Docker cache
+      - name: Build Package (Docker cache enabled)
+        run: |
+          ROOT_PATH="${{ github.workspace }}"
+          # Build rr-manager
+          docker run \
+            --cache-from ghcr.io/synocommunity/spksrc:latest \
+            -v ${ROOT_PATH}/spksrc:/spksrc \
+            -v ${ROOT_PATH}/rr-manager:/spksrc/spk/rr-manager \
+            -w /spksrc/spk/rr-manager \
+            ghcr.io/synocommunity/spksrc \
+            make arch-${{ matrix.target }}
+
+      # 8. Upload build artifacts
+      - name: Upload to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.target }}
+          path: spksrc/packages/*.spk
+
+      # 9. Set VERSION environment variable
+      - name: Set VERSION
+        run: echo "VERSION=${{ inputs.version || github.ref_name }}" >> $GITHUB_ENV
+
+      # 10. Create GitHub Release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/') || env.VERSION != ''
+        with:
+          tag_name: ${{ env.VERSION }}
+          files: spksrc/packages/*.spk
+          prerelease: ${{ inputs.prerelease }}
