@@ -1,11 +1,25 @@
 name: Build n Release Synology Smart Info Package
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "*"
 
   workflow_dispatch:
-    
+    inputs:
+      spksrc:
+        description: "branch"
+        required: false
+        type: string
+      version:
+        description: "version tag"
+        required: false
+        type: string
+      prerelease:
+        description: "pre release"
+        default: false
+        type: boolean
+        
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,7 +33,25 @@ jobs:
     steps:
         - name: Checkout
           uses: actions/checkout@v4
-          
+
+        # 2. spksrc source cache
+        - name: Cache spksrc source
+          uses: actions/cache@v3
+          with:
+            path: spksrc
+            key: spksrc-${{ runner.os }}-${{ hashFiles('spksrc/**') }}
+            restore-keys: |
+              spksrc-${{ runner.os }}-
+  
+        # 3. Set Docker Layer Cache Directory
+        - name: Cache Docker layers
+          uses: actions/cache@v3
+          with:
+            path: /home/runner/.docker
+            key: docker-${{ runner.os }}-${{ matrix.target }}-${{ github.sha }}
+            restore-keys: |
+              docker-${{ runner.os }}-${{ matrix.target }}-
+            
         - name: Download newest syno_smart_info.sh
           run: |
             curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh -o ./src/bin/syno_smart_info.sh
@@ -29,17 +61,6 @@ jobs:
             git config --global user.email "github-actions[bot]@users.noreply.github.com"
             git config --global user.name "github-actions[bot]"
 
-        #- name: Setup Node.js
-        #  uses: actions/setup-node@v4
-        #  with:
-        #    node-version: "16"
-  
-        #- name: Install Dependencies
-        #  run: |
-        #    cd rr-manager
-        #    npm install
-        #    npm run build
-  
         - name: Checkout SynoCommunity Source and Docker Image
           run: |
             docker pull ghcr.io/synocommunity/spksrc
@@ -51,18 +72,17 @@ jobs:
               git checkout "${{ inputs.spksrc }}"
               cd ..
             fi
-  
-        - name: Install UPX
-          uses: crazy-max/ghaction-upx@v3
-          with:
-            install-only: true
-  
-        - name: Build Package
+ 
+        - name: Build Package (Docker 레이어 캐시 적용)
           run: |
             ROOT_PATH="${{ github.workspace }}"
-            docker run -v ${ROOT_PATH}/spksrc:/spksrc -v ${ROOT_PATH}/rr-manager:/spksrc/spk/rr-manager -w /spksrc/spk/rr-manager ghcr.io/synocommunity/spksrc make arch-${{ matrix.target }}
-  
-            docker run -v ${ROOT_PATH}/spksrc:/spksrc -w /spksrc/spk/python311 ghcr.io/synocommunity/spksrc make arch-${{ matrix.target }}
+            docker run \
+              --cache-from ghcr.io/synocommunity/spksrc:latest \
+              -v ${ROOT_PATH}/spksrc:/spksrc \
+              -v ${ROOT_PATH}/rr-manager:/spksrc/spk/rr-manager \
+              -w /spksrc/spk/rr-manager \
+              ghcr.io/synocommunity/spksrc \
+              make arch-${{ matrix.target }}
   
         - name: Upload to Artifacts
           uses: actions/upload-artifact@v4
@@ -78,11 +98,3 @@ jobs:
             files: |
               spksrc/packages/*.spk
   
-        - name: Release
-          if: env.VERSION != ''
-          uses: ncipollo/release-action@v1
-          with:
-            tag: ${{ env.VERSION }}
-            prerelease: ${{ inputs.prerelease }}
-            artifacts: |
-              spksrc/packages/*.spk
