@@ -79,7 +79,9 @@ jobs:
       - name: Build Package (Docker cache enabled)
         run: |
           ROOT_PATH="${{ github.workspace }}"
-          # Build SynoSmartInfo
+          echo "ROOT_PATH=$ROOT_PATH"
+          docker pull ghcr.io/synocommunity/spksrc
+          ls -al ${ROOT_PATH}/spksrc
           docker run \
             --cache-from ghcr.io/synocommunity/spksrc:latest \
             -v ${ROOT_PATH}/spksrc:/spksrc \
@@ -87,7 +89,7 @@ jobs:
             -w /spksrc/spk/. \
             ghcr.io/synocommunity/spksrc \
             make arch-${{ matrix.target }}
-
+      
       # 8. Upload build artifacts
       - name: Upload to Artifacts
         uses: actions/upload-artifact@v4
