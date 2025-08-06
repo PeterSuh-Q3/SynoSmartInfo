@@ -1,3 +1,4 @@
+
 name: Build n Release Synology Smart Info Package
 
 on:
@@ -54,53 +55,53 @@ jobs:
           restore-keys: |
             spksrc-${{ runner.os }}-
 
-      # 4. Cache Docker layers
-      - name: Cache Docker layers
-        uses: actions/cache@v3
-        with:
-          path: /home/runner/.docker
-          key: docker-${{ runner.os }}-${{ matrix.target }}
-          restore-keys: |
-            docker-${{ runner.os }}-${{ matrix.target }}-
+      # 4. Setup build environment
+      - name: Setup spksrc build environment
+        run: |
+          cd spksrc
+          make setup
+          cd ..
 
-      # 5. Download latest syno_smart_info.sh
+      # 5. Prepare Synosmartinfo package directory
+      - name: Create Synosmartinfo spk directory
+        run: |
+          mkdir -p spksrc/spk/Synosmartinfo
+          cp -R ./* spksrc/spk/Synosmartinfo/
+          cp -R .github spksrc/spk/Synosmartinfo/
+          cp -R src spksrc/spk/Synosmartinfo/
+
+      # 6. Download latest syno_smart_info.sh
       - name: Download newest syno_smart_info.sh
         run: |
-          curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/main/syno_smart_info.sh \
-            -o ./src/bin/syno_smart_info.sh
+          curl -L https://raw.githubusercontent.com/007revad/Synology_SMART_info/main/syno_smart_info.sh \
+            -o spksrc/spk/Synosmartinfo/src/bin/syno_smart_info.sh
 
-      # 6. Initialize Git environment
+      # 7. Initialize Git environment
       - name: Init Env
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
 
-      # 7. Build packages (rr-manager & python311) with Docker cache
-      - name: Build Package (Docker cache enabled)
+      # 8. Build Synosmartinfo package via legacy make
+      - name: Build Package via make
         run: |
-          ROOT_PATH="${{ github.workspace }}"
-          echo "ROOT_PATH=$ROOT_PATH"
-          docker pull ghcr.io/synocommunity/spksrc:latest
-          ls -al ${ROOT_PATH}/spksrc
-          docker run \
-            -v ${ROOT_PATH}/spksrc:/spksrc \
-            -v ${ROOT_PATH}/.:/spksrc/spk/. \
-            -w /spksrc/spk/. \
-            ghcr.io/synocommunity/spksrc \
-            make arch-${{ matrix.target }}
-      
-      # 8. Upload build artifacts
+          cd spksrc
+          cd spk/Synosmartinfo
+          make arch-${{ matrix.target }}
+          cd ../../..
+
+      # 9. Upload build artifacts
       - name: Upload to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: packages-${{ matrix.target }}
           path: spksrc/packages/*.spk
 
-      # 9. Set VERSION environment variable
+      # 10. Set VERSION environment variable
       - name: Set VERSION
         run: echo "VERSION=${{ inputs.version || github.ref_name }}" >> $GITHUB_ENV
 
-      # 10. Create GitHub Release
+      # 11. Create GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/') || env.VERSION != ''
