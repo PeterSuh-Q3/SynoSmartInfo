@@ -66,9 +66,7 @@ jobs:
       - name: Create Synosmartinfo spk directory
         run: |
           mkdir -p spksrc/spk/Synosmartinfo
-          cp -R ./* spksrc/spk/Synosmartinfo/
-          cp -R .github spksrc/spk/Synosmartinfo/
-          cp -R src spksrc/spk/Synosmartinfo/
+          rsync -av --exclude='spksrc' --exclude='.git' . spksrc/spk/Synosmartinfo/          
 
       # 6. Download latest syno_smart_info.sh
       - name: Download newest syno_smart_info.sh
