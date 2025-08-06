@@ -79,12 +79,12 @@ jobs:
       - name: Build Package (Docker cache enabled)
         run: |
           ROOT_PATH="${{ github.workspace }}"
-          # Build rr-manager
+          # Build SynoSmartInfo
           docker run \
             --cache-from ghcr.io/synocommunity/spksrc:latest \
             -v ${ROOT_PATH}/spksrc:/spksrc \
-            -v ${ROOT_PATH}/rr-manager:/spksrc/spk/rr-manager \
-            -w /spksrc/spk/rr-manager \
+            -v ${ROOT_PATH}/.:/spksrc/spk/. \
+            -w /spksrc/spk/. \
             ghcr.io/synocommunity/spksrc \
             make arch-${{ matrix.target }}
 
