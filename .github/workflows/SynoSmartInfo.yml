@@ -28,7 +28,7 @@ jobs:
         target:
           - "x64-7.0"
           - "x64-7.1"
-          - "x64-7.2"
+          #- "x64-7.2"
 
     steps:
       # 1. Checkout repository
@@ -71,7 +71,7 @@ jobs:
       # 6. Download latest syno_smart_info.sh
       - name: Download newest syno_smart_info.sh
         run: |
-          curl -L https://raw.githubusercontent.com/007revad/Synology_SMART_info/main/syno_smart_info.sh \
+          curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/main/syno_smart_info.sh \
             -o spksrc/spk/Synosmartinfo/src/bin/syno_smart_info.sh
 
       # 7. Initialize Git environment
