@@ -1,0 +1,88 @@
+name: Build n Release Synology Smart Info Package
+
+on:
+  release:
+    types: [published]
+
+  workflow_dispatch:
+    
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+        - "x64-7.0"
+        - "x64-7.1"        
+        - "x64-7.2"
+        
+    steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+          
+        - name: Download newest syno_smart_info.sh
+          run: |
+            curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh -o ./src/bin/syno_smart_info.sh
+            
+        - name: Init Env
+          run: |
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git config --global user.name "github-actions[bot]"
+
+        #- name: Setup Node.js
+        #  uses: actions/setup-node@v4
+        #  with:
+        #    node-version: "16"
+  
+        #- name: Install Dependencies
+        #  run: |
+        #    cd rr-manager
+        #    npm install
+        #    npm run build
+  
+        - name: Checkout SynoCommunity Source and Docker Image
+          run: |
+            docker pull ghcr.io/synocommunity/spksrc
+            git clone --depth=1 https://github.com/SynoCommunity/spksrc.git
+  
+            if [ -n "${{ inputs.spksrc }}" ]; then
+              cd spksrc
+              git fetch --depth=1 origin "${{ inputs.spksrc }}"
+              git checkout "${{ inputs.spksrc }}"
+              cd ..
+            fi
+  
+        - name: Install UPX
+          uses: crazy-max/ghaction-upx@v3
+          with:
+            install-only: true
+  
+        - name: Build Package
+          run: |
+            ROOT_PATH="${{ github.workspace }}"
+            docker run -v ${ROOT_PATH}/spksrc:/spksrc -v ${ROOT_PATH}/rr-manager:/spksrc/spk/rr-manager -w /spksrc/spk/rr-manager ghcr.io/synocommunity/spksrc make arch-${{ matrix.target }}
+  
+            docker run -v ${ROOT_PATH}/spksrc:/spksrc -w /spksrc/spk/python311 ghcr.io/synocommunity/spksrc make arch-${{ matrix.target }}
+  
+        - name: Upload to Artifacts
+          uses: actions/upload-artifact@v4
+          with:
+            name: packages-${{ matrix.target }}
+            path: |
+              spksrc/packages/*.spk
+  
+        - name: Release
+          uses: softprops/action-gh-release@v1
+          if: startsWith(github.ref, 'refs/tags/')
+          with:
+            files: |
+              spksrc/packages/*.spk
+  
+        - name: Release
+          if: env.VERSION != ''
+          uses: ncipollo/release-action@v1
+          with:
+            tag: ${{ env.VERSION }}
+            prerelease: ${{ inputs.prerelease }}
+            artifacts: |
+              spksrc/packages/*.spk
