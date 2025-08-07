@@ -1,8 +1,0 @@
-#!/bin/bash
-
-# 심볼릭 링크 제거
-PKG_NAME=$(basename "$SYNOPKG_PKGDEST")
-rm -f /usr/syno/synoman/webman/3rdparty/$PKG_NAME
-
-exit 0
-
