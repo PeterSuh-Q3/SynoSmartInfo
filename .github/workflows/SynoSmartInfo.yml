@@ -1,108 +1,49 @@
-
 name: Build n Release Synology Smart Info Package
 
 on:
-  push:
-    tags:
-      - "*"
+  release:
+    types: [published]
+
   workflow_dispatch:
-    inputs:
-      spksrc:
-        description: "branch"
-        required: false
-        type: string
-      version:
-        description: "version tag"
-        required: false
-        type: string
-      prerelease:
-        description: "pre release"
-        default: false
-        type: boolean
-
+    
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        target:
-          - "x64-7.0"
-          - "x64-7.1"
-          - "x64-7.2"
-
-    steps:
-      # 1. Checkout repository
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # 2. Clone SynoCommunity spksrc
-      - name: Checkout SynoCommunity Source
-        run: |
-          git clone --depth=1 https://github.com/SynoCommunity/spksrc.git
-          if [ -n "${{ inputs.spksrc }}" ]; then
-            cd spksrc
-            git fetch --depth=1 origin "${{ inputs.spksrc }}"
-            git checkout "${{ inputs.spksrc }}"
-            cd ..
-          fi
-
-      # 3. Cache spksrc source (after clone)
-      - name: Cache spksrc source
-        uses: actions/cache@v3
-        with:
-          path: spksrc
-          key: spksrc-${{ runner.os }}-${{ hashFiles('spksrc/**') }}
-          restore-keys: |
-            spksrc-${{ runner.os }}-
-
-      # 4. Setup build environment
-      - name: Setup spksrc build environment
-        run: |
-          cd spksrc
-          make setup
-          cd ..
-
-      # 5. Prepare Synosmartinfo package directory
-      - name: Create Synosmartinfo spk directory
-        run: |
-          mkdir -p spksrc/spk/Synosmartinfo
-          rsync -av --exclude='spksrc' --exclude='.git' . spksrc/spk/Synosmartinfo/          
-
-      # 6. Download latest syno_smart_info.sh
-      - name: Download newest syno_smart_info.sh
-        run: |
-          curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/main/syno_smart_info.sh \
-            -o spksrc/spk/Synosmartinfo/src/bin/syno_smart_info.sh
-
-      # 7. Initialize Git environment
-      - name: Init Env
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-
-      # 8. Build Synosmartinfo package via legacy make
-      - name: Build Package via make
-        run: |
-          cd spksrc
-          make arch-${{ matrix.target }}
-          cd ../../..
-
-      # 9. Upload build artifacts
-      - name: Upload to Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: packages-${{ matrix.target }}
-          path: spksrc/packages/*.spk
-
-      # 10. Set VERSION environment variable
-      - name: Set VERSION
-        run: echo "VERSION=${{ inputs.version || github.ref_name }}" >> $GITHUB_ENV
-
-      # 11. Create GitHub Release
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/') || env.VERSION != ''
-        with:
-          tag_name: ${{ env.VERSION }}
-          files: spksrc/packages/*.spk
-          prerelease: ${{ inputs.prerelease }}
+    build-spk:
+        name: Build Package
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                arch: ['kvmx64']
+                dsm: ['7.0','7.1','7.2']
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            - name: Download newest syno_smart_info.sh
+              run: |
+                curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh -o ./SynoSmartInfo/target/bin/syno_smart_info.sh
+            - name: Synology Package Builder Github Action
+              uses: tomgrv/synology-package-builder@v1.3.0
+              with:
+                  dsm: ${{ matrix.dsm }}
+                  arch: ${{ matrix.arch }}
+                  projects: SynoSmartInfo:./SynoSmartInfo
+                  output: ./dist
+            - name: Remove debug spk and rename package
+              run: |
+                ls -l ./dist
+                rm ./dist/*_debug.spk
+                for f in ./dist/*.spk; do
+                  mv "$f" "${f%.spk}-${{ matrix.dsm }}.spk"
+                done
+                ls -l ./dist
+            - name: Upload Package
+              uses: actions/upload-artifact@v4
+              with:
+                  name: SynoSmartInfo-${{ matrix.dsm }}
+                  path: ./dist/*.spk
+            - name: Release
+              uses: softprops/action-gh-release@v2
+              with:
+                tag_name: ${{ inputs.version }}
+                files: |
+                  ./dist/*.spk            
