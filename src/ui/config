@@ -1,0 +1,14 @@
+{
+  ".url": {
+    "SYNO.SDS.Synosmartinfo": {
+      "type"       : "url",
+      "icon"       : "images/icon_256.png",
+      "title"      : "Syno Smart Info",
+      "desc"       : "Syno Smart Info Checking tool",
+      "url"        : "webman/3rdparty/Synosmartinfo/index.html",        
+      "width"      : 800,
+      "height"     : 600,
+      "allUsers"   : true
+    }
+  }
+}
