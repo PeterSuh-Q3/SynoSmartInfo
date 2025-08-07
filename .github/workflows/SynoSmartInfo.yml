@@ -14,19 +14,19 @@ jobs:
             fail-fast: false
             matrix:
                 arch: ['kvmx64']
-                dsm: ['7.0','7.1','7.2']
+#                dsm: ['7.0','7.1','7.2']
+                dsm: ['7.2']
         steps:
             - name: Checkout
               uses: actions/checkout@v4
             - name: Download newest syno_smart_info.sh
               run: |
-                curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh -o ./SynoSmartInfo/src/bin/syno_smart_info.sh
+                curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh -o ./src/bin/syno_smart_info.sh
             - name: Synology Package Builder Github Action
               uses: tomgrv/synology-package-builder@v1.3.0
               with:
                   dsm: ${{ matrix.dsm }}
                   arch: ${{ matrix.arch }}
-                  projects: SynoSmartInfo:./SynoSmartInfo
                   output: ./dist
             - name: Remove debug spk and rename package
               run: |
@@ -47,3 +47,4 @@ jobs:
                 tag_name: ${{ inputs.version }}
                 files: |
                   ./dist/*.spk            
+                  
