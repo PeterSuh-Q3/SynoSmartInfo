@@ -11,7 +11,7 @@ Synosmartinfo synology user must be granted the authority to process with sudoer
 
 Check if the file already exists with the command below, and if not,
 
-sudores processing as below is absolutely necessary.
+sudoers processing as below is absolutely necessary.
 
 ```
 sudo -i
