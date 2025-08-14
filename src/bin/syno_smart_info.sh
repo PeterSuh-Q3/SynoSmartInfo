@@ -53,15 +53,23 @@ fi
 # smartctl wrapper: Try -d sat first, if fail then retry with -d scsi
 _smartctl_auto() {
     local args=("$@")
-    if ! "$smartctl" -d sat -T permissive "${args[@]}" 2>/tmp/smart_err.$drive; then
-        # If sat failed, detect keywords and retry with scsi
-        if grep -qiE "Unknown|failed|Ambiguous|not supported" /tmp/smart_err.$drive; then
-            "$smartctl" -d scsi -T permissive "${args[@]}"
-        else
-            cat /tmp/smart_err.$drive
-        fi
+    local combined
+    local keywords="Unknown|failed|Ambiguous|not supported"
+
+    # Run with -d sat first (-T permissive), capture both stdout and stderr
+    combined=$("$smartctl" -d sat -T permissive "${args[@]}" 2>&1)
+    local retcode=$?
+
+    # If command failed and output contains specific keywords, retry with -d scsi
+    if [[ $retcode -ne 0 && "$combined" =~ $keywords ]]; then
+        # Retry using SCSI device type
+        "$smartctl" -d scsi -T permissive "${args[@]}"
+        return $?
+    else
+        # Otherwise, print the result from the SAT run
+        echo "$combined"
+        return $retcode
     fi
-    rm -f /tmp/smart_err.$drive
 }
 
 ding(){ 
