@@ -431,6 +431,8 @@ show_health(){
             if [[ -n "$strIn" ]]; then  # Don't echo blank line
                 if $(echo "$strIn" | grep -qi PASSED); then
                     echo -e "SMART overall-health self-assessment test result: ${LiteGreen}PASSED${Off}"
+                elif $(echo "$strIn" | grep -qi 'Health Status: OK'); then
+                    echo -e "SMART Health Status: ${LiteGreen}OK${Off}"
                 else
                     echo "$strIn"
                 fi
@@ -455,7 +457,7 @@ show_health(){
 
     # Show SMART attributes
     health=$(_smartctl_auto -H /dev/"$drive" | tail -n +5)
-    if ! echo "$health" | grep PASSED >/dev/null || [[ $all == "yes" ]]; then
+    if ! echo "$health" | grep -E 'PASSED|Health Status: OK' >/dev/null || [[ $all == "yes" ]]; then
         # Show all SMART attributes if health != passed
         smart_all
     else
