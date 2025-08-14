@@ -713,7 +713,7 @@ for drive in "${drives[@]}"; do
         # DSM 6 or older
 
         # Show SMART test status if SMART test running
-        percentleft=$(_smartctl_auto -a /dev/"$drive" | grep "ScanStatus" | cut -d " " -f9-13)        
+        percentdone=$(_smartctl_auto -a /dev/"$drive" | grep "ScanStatus" | cut -d " " -f9-13)        
         if [[ $percentdone ]]; then
             hourselapsed=$(_smartctl_auto -a /dev/"$drive" | grep " Self-test routine in progress" | cut -d " " -f21)            
             echo "Drive $model $serial ${percentdone}% done."
