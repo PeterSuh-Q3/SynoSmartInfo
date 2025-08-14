@@ -63,7 +63,7 @@ _smartctl_auto() {
     # If command failed and output contains specific keywords, retry with -d scsi
     if [[ $retcode -ne 0 && "$combined" =~ $keywords ]]; then
         # Retry using SCSI device type
-        "$smartctl" -d scsi -T permissive "${args[@]}"
+        "$smartctl" -a -d scsi -T permissive "${args[@]}"
         return $?
     else
         # Otherwise, print the result from the SAT run
