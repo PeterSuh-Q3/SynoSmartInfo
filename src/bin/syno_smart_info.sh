@@ -361,17 +361,15 @@ smart_all(){
     if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
         # Get all attributes, skip built-in header (first 6 lines), then drop “ID#” header
         readarray -t att_array < <(
-            "$smartctl" -A -f brief -d sat -T permissive \
-                -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 "/dev/$drive" \
-            | tail -n +7 \
-            | grep -v '^ID#'
-        )
+            _smartctl_auto -A -f brief \
+            -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 "/dev/$drive" \
+            | tail -n +7 | grep -v '^ID#'
+        )        
     else
         # Same for non-Seagate drives
         readarray -t att_array < <(
-            "$smartctl" -A -f brief -d sat -T permissive "/dev/$drive" \
-            | tail -n +7 \
-            | grep -v '^ID#'
+            _smartctl_auto -A -f brief "/dev/$drive" \
+            | tail -n +7 | grep -v '^ID#'
         )
     fi
     
@@ -406,7 +404,7 @@ show_health(){
     local att194
 
     # Show drive overall health
-    readarray -t health_array < <("$smartctl" -H -d sat -T permissive /dev/"$drive" | tail -n +5)
+    readarray -t health_array < <(_smartctl_auto -H /dev/"$drive" | tail -n +5)
     for strIn in "${health_array[@]}"; do
         if echo "$strIn" | awk '{print $1}' | grep -E '[0-9]' >/dev/null ||\
            echo "$strIn" | awk '{print $1}' | grep 'ID#' >/dev/null ; then
@@ -436,7 +434,7 @@ show_health(){
     #"$smartctl" -l error /dev/"$drive" | grep -iE 'error.*logg'
 
     # Retrieve Error Log and show error count
-    errlog="$("$smartctl" -l error /dev/"$drive" | grep -iE 'error.*logg')"
+    errlog="$(_smartctl_auto -l error /dev/"$drive" | grep -iE 'error.*logg')"
     errcount="$(echo "$errlog" | awk '{print $3}')"
     #echo "$errlog"
     if [[ $errcount -gt "0" ]]; then
@@ -448,16 +446,16 @@ show_health(){
     fi
 
     # Show SMART attributes
-    health=$("$smartctl" -H -d sat -T permissive /dev/"$drive" | tail -n +5)
+    health=$(_smartctl_auto -H /dev/"$drive" | tail -n +5)
     if ! echo "$health" | grep PASSED >/dev/null || [[ $all == "yes" ]]; then
         # Show all SMART attributes if health != passed
         smart_all
     else
         # Show only important SMART attributes
         if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
-            readarray -t smart_atts < <("$smartctl" -A -d sat -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 /dev/"$drive")
+            readarray -t smart_atts < <(_smartctl_auto -A -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 /dev/"$drive")
         else
-            readarray -t smart_atts < <("$smartctl" -A -d sat /dev/"$drive")
+            readarray -t smart_atts < <(_smartctl_auto -A /dev/"$drive")
         fi
         # Decide if show airflow temperature
         if echo "${smart_atts[*]}" | grep -c '194 Temp' >/dev/null; then
@@ -695,9 +693,9 @@ for drive in "${drives[@]}"; do
         # DSM 7 or newer
 
         # Show SMART test status if SMART test running
-        percentleft=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f9-13)
+        percentleft=$(_smartctl_auto -a /dev/"$drive" | grep " Self-test routine in progress" | cut -d " " -f9-13)
         if [[ $percentleft ]]; then
-            hourselapsed=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f21)
+            hourselapsed=$(_smartctl_auto -a /dev/"$drive" | grep " Self-test routine in progress" | cut -d " " -f21)
             echo "Drive $model $serial $percentleft remaining, $hourselapsed hours elapsed."
         else
             # Show drive health
@@ -707,9 +705,9 @@ for drive in "${drives[@]}"; do
         # DSM 6 or older
 
         # Show SMART test status if SMART test running
-        percentdone=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "ScanStatus" | cut -d " " -f3-4)
+        percentleft=$(_smartctl_auto -a /dev/"$drive" | grep "ScanStatus" | cut -d " " -f9-13)        
         if [[ $percentdone ]]; then
-            hourselapsed=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f21)
+            hourselapsed=$(_smartctl_auto -a /dev/"$drive" | grep " Self-test routine in progress" | cut -d " " -f21)            
             echo "Drive $model $serial ${percentdone}% done."
         else
             # Show drive health
