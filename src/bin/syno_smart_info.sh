@@ -22,7 +22,7 @@
 # https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
 #------------------------------------------------------------------------------
 
-scriptver="v1.3.14"
+scriptver="v1.3.15"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -49,6 +49,20 @@ if which smartctl7 >/dev/null; then
 else
     smartctl=$(which smartctl)
 fi
+
+# smartctl wrapper: Try -d sat first, if fail then retry with -d scsi
+_smartctl_auto() {
+    local args=("$@")
+    if ! "$smartctl" -d sat -T permissive "${args[@]}" 2>/tmp/smart_err.$drive; then
+        # If sat failed, detect keywords and retry with scsi
+        if grep -qiE "Unknown|failed|Ambiguous|not supported" /tmp/smart_err.$drive; then
+            "$smartctl" -d scsi -T permissive "${args[@]}"
+        else
+            cat /tmp/smart_err.$drive
+        fi
+    fi
+    rm -f /tmp/smart_err.$drive
+}
 
 ding(){ 
     printf \\a
