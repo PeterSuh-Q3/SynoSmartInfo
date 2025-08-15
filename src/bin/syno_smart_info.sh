@@ -79,7 +79,7 @@ _smartctl_auto() {
             "$smartctl" -d scsi -T permissive "${args[@]}"
         else
             # Ignore original arguments and force full output for SCSI
-            "$smartctl" -d scsi -T permissive -a "/dev/$drive"
+            "$smartctl" -d scsi -T permissive -a "/dev/$drive" | tail -n +25
         fi
         dtype="scsi"
         return $?
