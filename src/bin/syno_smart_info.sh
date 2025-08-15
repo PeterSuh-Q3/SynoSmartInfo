@@ -385,7 +385,6 @@ print_smart_header() {
 smart_all(){ 
     # Show all SMART attributes
     # $drive is sata1 or sda or usb1 etc
-    echo ""
     
     if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
         # Get all attributes, skip built-in header (first 6 lines), then drop “ID#” header
