@@ -58,9 +58,6 @@ process_scsi_smart_output() {
     local id_items=()
     local other_items=()
     
-    echo "DEBUG: Starting SCSI output processing..."
-    echo "DEBUG: Input length: ${#scsi_output} characters"
-    
     # Define SMART ID mappings with more flexible pattern matching
     declare -A smart_id_map=(
         ["Current Drive Temperature"]="194 Temperature_Celsius"
@@ -70,25 +67,17 @@ process_scsi_smart_output() {
         ["Elements in grown defect list"]="5 Reallocated_Sector_Ct"
     )
     
-    echo "DEBUG: Defined ${#smart_id_map[@]} mapping patterns"
-    
-    local line_count=0
     # Process SCSI output line by line
     while IFS= read -r line; do
-        ((line_count++))
-        echo "DEBUG: Processing line $line_count: '$line'"
-        
         local matched=false
         local raw_value=""
         
         # Skip empty lines and section headers
         if [[ -z "$line" || "$line" =~ ^[[:space:]]*$ ]]; then
-            echo "DEBUG: Skipping empty line"
             continue
         fi
         
         if [[ "$line" =~ ^=.*=$ ]]; then
-            echo "DEBUG: Adding section header to other_items"
             other_items+=("$line")
             continue
         fi
@@ -100,41 +89,33 @@ process_scsi_smart_output() {
            [[ "$line" =~ ^read:[[:space:]] ]] || \
            [[ "$line" =~ ^write:[[:space:]] ]] || \
            [[ "$line" =~ ^verify:[[:space:]] ]]; then
-            echo "DEBUG: Adding error counter line to other_items"
             other_items+=("$line")
             continue
         fi
         
         # Check for ID mappable patterns
         for pattern in "${!smart_id_map[@]}"; do
-            echo "DEBUG: Checking pattern '$pattern' against line"
             if [[ "$line" =~ $pattern ]]; then
-                echo "DEBUG: Pattern '$pattern' matched!"
                 case "$pattern" in
                     "Current Drive Temperature")
-                        # Extract temperature value: "Current Drive Temperature:     48 C"
+                        # Extract temperature value: "Current Drive Temperature:     53 C"
                         raw_value=$(echo "$line" | sed -n 's/.*:[[:space:]]*\([0-9]\+\).*/\1/p')
-                        echo "DEBUG: Extracted temperature: '$raw_value'"
                         ;;
                     "Accumulated power on time")
-                        # Extract hours:minutes: "Accumulated power on time, hours:minutes 805:03"
+                        # Extract hours:minutes: "Accumulated power on time, hours:minutes 811:55"
                         raw_value=$(echo "$line" | sed -n 's/.*[[:space:]]\([0-9]\+:[0-9]\+\).*/\1/p')
-                        echo "DEBUG: Extracted power on time: '$raw_value'"
                         ;;
                     "Accumulated start-stop cycles")
-                        # Extract cycle count: "Accumulated start-stop cycles:  56"
+                        # Extract cycle count: "Accumulated start-stop cycles:  55"
                         raw_value=$(echo "$line" | sed -n 's/.*:[[:space:]]*\([0-9]\+\).*/\1/p')
-                        echo "DEBUG: Extracted start-stop cycles: '$raw_value'"
                         ;;
                     "Accumulated load-unload cycles")
-                        # Extract cycle count: "Accumulated load-unload cycles:  2568"
+                        # Extract cycle count: "Accumulated load-unload cycles:  2569"
                         raw_value=$(echo "$line" | sed -n 's/.*:[[:space:]]*\([0-9]\+\).*/\1/p')
-                        echo "DEBUG: Extracted load-unload cycles: '$raw_value'"
                         ;;
                     "Elements in grown defect list")
                         # Extract defect count: "Elements in grown defect list: 0"
                         raw_value=$(echo "$line" | sed -n 's/.*:[[:space:]]*\([0-9]\+\).*/\1/p')
-                        echo "DEBUG: Extracted defect list: '$raw_value'"
                         ;;
                 esac
                 
@@ -143,25 +124,19 @@ process_scsi_smart_output() {
                     local id_attr="${smart_id_map[$pattern]}"
                     local id_num=$(echo "$id_attr" | cut -d' ' -f1)
                     local attr_name=$(echo "$id_attr" | cut -d' ' -f2)
-                    echo "DEBUG: Adding ID item: $id_num $attr_name $raw_value"
                     id_items+=("$id_num $attr_name $raw_value")
                     matched=true
                     break
-                else
-                    echo "DEBUG: Failed to extract value for pattern '$pattern'"
                 fi
             fi
         done
         
         # Add unmatched items to other items
         if [[ "$matched" == false ]]; then
-            echo "DEBUG: Adding unmatched line to other_items"
             other_items+=("$line")
         fi
         
     done <<< "$scsi_output"
-    
-    echo "DEBUG: Processing complete. Found ${#id_items[@]} ID items and ${#other_items[@]} other items"
     
     # Output ID-assigned items (top section)
     if [[ ${#id_items[@]} -gt 0 ]]; then
@@ -180,7 +155,6 @@ process_scsi_smart_output() {
         done
     fi
 }
-
 
 # Integrate with _smartctl_auto function
 _smartctl_auto() {
