@@ -58,19 +58,33 @@ _smartctl_auto() {
     local args=("$@")
     local combined
     local keywords="Unknown|failed|Ambiguous|not supported"
+    local has_H=false
 
-    # Run with -d sat first (-T permissive), capture both stdout and stderr
+    # Try with SAT type first (-T permissive), capture both stdout and stderr
     combined=$("$smartctl" -d sat -T permissive "${args[@]}" 2>&1)
     local retcode=$?
 
-    # If command failed and output contains specific keywords, retry with -d scsi
+    # Check if the original arguments contain the -H (health status) option
+    for arg in "${args[@]}"; do
+        if [[ "$arg" == "-H" ]]; then
+            has_H=true
+            break
+        fi
+    done
+
+    # If SAT command failed and the output contains specific keywords, retry with SCSI
     if [[ $retcode -ne 0 && "$combined" =~ $keywords ]]; then
-        # Retry using SCSI device type
-        "$smartctl" -d scsi -T permissive "${args[@]}"
+        if $has_H; then
+            # Keep original arguments if -H is present
+            "$smartctl" -d scsi -T permissive "${args[@]}"
+        else
+            # Ignore original arguments and force full output for SCSI
+            "$smartctl" -d scsi -T permissive -a "/dev/$drive"
+        fi
         dtype="scsi"
         return $?
     else
-        # Otherwise, print the result from the SAT run
+        # Otherwise, output the result from the SAT run
         echo "$combined"
         dtype="sat"
         return $retcode
