@@ -41,6 +41,9 @@ smallfixnumber=$(/usr/syno/bin/synogetkeyvalue /etc.defaults/VERSION smallfixnum
 # Get DSM major version
 dsm=$(get_key_value /etc.defaults/VERSION majorversion)
 
+# Define device type (sat or scsi)
+dtype="sat"
+
 # Get smartctl location and check if version 7
 if which smartctl7 >/dev/null; then
     # smartmontools 7 from SynoCli Disk Tools is installed
@@ -64,10 +67,12 @@ _smartctl_auto() {
     if [[ $retcode -ne 0 && "$combined" =~ $keywords ]]; then
         # Retry using SCSI device type
         "$smartctl" -d scsi -T permissive "${args[@]}"
+        dtype="scsi"
         return $?
     else
         # Otherwise, print the result from the SAT run
         echo "$combined"
+        dtype="sat"
         return $retcode
     fi
 }
@@ -363,9 +368,6 @@ smart_all(){
     # $drive is sata1 or sda or usb1 etc
     echo ""
     
-    # Output aligned header
-    print_smart_header
-    
     if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
         # Get all attributes, skip built-in header (first 6 lines), then drop “ID#” header
         readarray -t att_array < <(
@@ -384,7 +386,9 @@ smart_all(){
     for strIn in "${att_array[@]}"; do
         # Remove lines containing ||||||_ to |______
         if ! echo "$strIn" | grep '|_' >/dev/null ; then
-            # Use Python-based formatting instead of original string cutting
+            # Output aligned header
+            [ "$dtype" = "sat" ] && print_smart_header
+            # Use Python-based formatting instead of original string cutting            
             print_colored_smart_attribute "$strIn"
         fi
     done
