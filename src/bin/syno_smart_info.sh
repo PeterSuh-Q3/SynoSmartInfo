@@ -77,6 +77,11 @@ _smartctl_auto() {
     fi
 }
 
+detect_dtype() {
+    _smartctl_auto -i /dev/"$drive" >/dev/null 2>&1
+    echo "$dtype"
+}
+
 ding(){ 
     printf \\a
 }
@@ -382,12 +387,16 @@ smart_all(){
             | tail -n +7 | grep -v '^ID#'
         )
     fi
+
+    local drive_type
+    drive_type=$(detect_dtype)
+    echo ""
+    # Output aligned header
+    [ "$drive_type" = "sat" ] && print_smart_header
     
     for strIn in "${att_array[@]}"; do
         # Remove lines containing ||||||_ to |______
         if ! echo "$strIn" | grep '|_' >/dev/null ; then
-            # Output aligned header
-            [ "$dtype" = "sat" ] && print_smart_header
             # Use Python-based formatting instead of original string cutting            
             print_colored_smart_attribute "$strIn"
         fi
