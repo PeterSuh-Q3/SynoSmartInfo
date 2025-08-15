@@ -53,17 +53,78 @@ else
     smartctl=$(which smartctl)
 fi
 
-# smartctl wrapper: Try -d sat first, if fail then retry with -d scsi
+process_scsi_smart_output() {
+    local scsi_output="$1"
+    local id_items=()
+    local other_items=()
+    
+    # Define SMART ID mappings for matchable patterns
+    declare -A smart_id_map=(
+        ["Current Drive Temperature"]="194 Temperature_Celsius"
+        ["Accumulated power on time"]="9 Power_On_Hours" 
+        ["Accumulated start-stop cycles"]="4 Start_Stop_Count"
+        ["Accumulated load-unload cycles"]="193 Load_Cycle_Count"
+        ["Elements in grown defect list"]="5 Reallocated_Sector_Ct"
+    )
+    
+    # Process SCSI output line by line
+    while IFS= read -r line; do
+        local matched=false
+        
+        # Compare with each mapping pattern
+        for pattern in "${!smart_id_map[@]}"; do
+            if [[ "$line" =~ $pattern ]]; then
+                # Extract value (part after colon)
+                local raw_value=$(echo "$line" | sed 's/.*: *\([^ ]*\).*/\1/')
+                
+                # Extract ID and ATTRIBUTE_NAME
+                local id_attr="${smart_id_map[$pattern]}"
+                local id_num=$(echo "$id_attr" | cut -d' ' -f1)
+                local attr_name=$(echo "$id_attr" | cut -d' ' -f2)
+                
+                # Add to ID array
+                id_items+=("$id_num $attr_name $raw_value")
+                matched=true
+                break
+            fi
+        done
+        
+        # Add unmatched items to other items
+        if [[ "$matched" == false && -n "$line" ]]; then
+            other_items+=("$line")
+        fi
+        
+    done <<< "$scsi_output"
+    
+    # Output ID-assigned items (top section)
+    if [[ ${#id_items[@]} -gt 0 ]]; then
+        echo "ID#   ATTRIBUTE_NAME       RAW_VALUE"
+        for item in "${id_items[@]}"; do
+            printf "%-5s %-20s %s\n" $item
+        done
+        echo
+    fi
+    
+    # Output other items (bottom section)
+    if [[ ${#other_items[@]} -gt 0 ]]; then
+        echo "Other Attributes:"
+        for item in "${other_items[@]}"; do
+            echo "$item"
+        done
+    fi
+}
+
+# Integrate with _smartctl_auto function
 _smartctl_auto() {
     local args=("$@")
     local combined
     local keywords="Unknown|failed|Ambiguous|not supported"
     local has_H=false
-
+    
     # Try with SAT type first (-T permissive), capture both stdout and stderr
     combined=$("$smartctl" -d sat -T permissive "${args[@]}" 2>&1)
     local retcode=$?
-
+    
     # Check if the original arguments contain the -H (health status) option
     for arg in "${args[@]}"; do
         if [[ "$arg" == "-H" ]]; then
@@ -71,15 +132,16 @@ _smartctl_auto() {
             break
         fi
     done
-
+    
     # If SAT command failed and the output contains specific keywords, retry with SCSI
     if [[ $retcode -ne 0 && "$combined" =~ $keywords ]]; then
         if $has_H; then
             # Keep original arguments if -H is present
             "$smartctl" -d scsi -T permissive "${args[@]}"
         else
-            # Ignore original arguments and force full output for SCSI
-            "$smartctl" -d scsi -T permissive -a "/dev/$drive" | tail -n +19
+            # Get SCSI output and process it
+            local scsi_raw_output=$("$smartctl" -d scsi -T permissive -a "/dev/$drive" | tail -n +19)
+            process_scsi_smart_output "$scsi_raw_output"
         fi
         dtype="scsi"
         return $?
