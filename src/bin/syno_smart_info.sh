@@ -58,7 +58,7 @@ process_scsi_smart_output() {
     local id_items=()
     local other_items=()
     
-    # Define SMART ID mappings for matchable patterns
+    # Define SMART ID mappings with more flexible pattern matching
     declare -A smart_id_map=(
         ["Current Drive Temperature"]="194 Temperature_Celsius"
         ["Accumulated power on time"]="9 Power_On_Hours" 
@@ -70,27 +70,59 @@ process_scsi_smart_output() {
     # Process SCSI output line by line
     while IFS= read -r line; do
         local matched=false
+        local raw_value=""
         
-        # Compare with each mapping pattern
+        # Skip empty lines and section headers
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*$ ]] && continue
+        [[ "$line" =~ ^=.*=$ ]] && { other_items+=("$line"); continue; }
+        [[ "$line" =~ ^Error[[:space:]]counter[[:space:]]log: ]] && { other_items+=("$line"); continue; }
+        [[ "$line" =~ ^Errors[[:space:]]Corrected ]] && { other_items+=("$line"); continue; }
+        [[ "$line" =~ ^ECC[[:space:]] ]] && { other_items+=("$line"); continue; }
+        [[ "$line" =~ ^fast[[:space:]]\|[[:space:]]delayed ]] && { other_items+=("$line"); continue; }
+        [[ "$line" =~ ^read:[[:space:]] ]] && { other_items+=("$line"); continue; }
+        [[ "$line" =~ ^write:[[:space:]] ]] && { other_items+=("$line"); continue; }
+        [[ "$line" =~ ^verify:[[:space:]] ]] && { other_items+=("$line"); continue; }
+        
+        # Check for ID mappable patterns
         for pattern in "${!smart_id_map[@]}"; do
             if [[ "$line" =~ $pattern ]]; then
-                # Extract value (part after colon)
-                local raw_value=$(echo "$line" | sed 's/.*: *\([^ ]*\).*/\1/')
+                case "$pattern" in
+                    "Current Drive Temperature")
+                        # Extract temperature value: "Current Drive Temperature:     48 C"
+                        raw_value=$(echo "$line" | sed -n 's/.*:[[:space:]]*\([0-9]\+\).*/\1/p')
+                        ;;
+                    "Accumulated power on time")
+                        # Extract hours:minutes: "Accumulated power on time, hours:minutes 805:03"
+                        raw_value=$(echo "$line" | sed -n 's/.*[[:space:]]\([0-9]\+:[0-9]\+\).*/\1/p')
+                        ;;
+                    "Accumulated start-stop cycles")
+                        # Extract cycle count: "Accumulated start-stop cycles:  56"
+                        raw_value=$(echo "$line" | sed -n 's/.*:[[:space:]]*\([0-9]\+\).*/\1/p')
+                        ;;
+                    "Accumulated load-unload cycles")
+                        # Extract cycle count: "Accumulated load-unload cycles:  2568"
+                        raw_value=$(echo "$line" | sed -n 's/.*:[[:space:]]*\([0-9]\+\).*/\1/p')
+                        ;;
+                    "Elements in grown defect list")
+                        # Extract defect count: "Elements in grown defect list: 0"
+                        raw_value=$(echo "$line" | sed -n 's/.*:[[:space:]]*\([0-9]\+\).*/\1/p')
+                        ;;
+                esac
                 
-                # Extract ID and ATTRIBUTE_NAME
-                local id_attr="${smart_id_map[$pattern]}"
-                local id_num=$(echo "$id_attr" | cut -d' ' -f1)
-                local attr_name=$(echo "$id_attr" | cut -d' ' -f2)
-                
-                # Add to ID array
-                id_items+=("$id_num $attr_name $raw_value")
-                matched=true
-                break
+                # Only add to ID items if we successfully extracted a value
+                if [[ -n "$raw_value" ]]; then
+                    local id_attr="${smart_id_map[$pattern]}"
+                    local id_num=$(echo "$id_attr" | cut -d' ' -f1)
+                    local attr_name=$(echo "$id_attr" | cut -d' ' -f2)
+                    id_items+=("$id_num $attr_name $raw_value")
+                    matched=true
+                    break
+                fi
             fi
         done
         
         # Add unmatched items to other items
-        if [[ "$matched" == false && -n "$line" ]]; then
+        if [[ "$matched" == false ]]; then
             other_items+=("$line")
         fi
         
