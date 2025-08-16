@@ -53,120 +53,17 @@ else
     smartctl=$(which smartctl)
 fi
 
-process_scsi_smart_output() {
-    local scsi_output="$1"
-    local id_items=()
-    local other_items=()
-    
-    # Define SMART ID mappings with more flexible pattern matching
-    declare -A smart_id_map=(
-        ["Current Drive Temperature"]="194 Temperature_Celsius"
-        ["Accumulated power on time"]="9 Power_On_Hours" 
-        ["Accumulated start-stop cycles"]="4 Start_Stop_Count"
-        ["Accumulated load-unload cycles"]="193 Load_Cycle_Count"
-        ["Elements in grown defect list"]="5 Reallocated_Sector_Ct"
-    )
-    
-    # Process SCSI output line by line
-    while IFS= read -r line; do
-        local matched=false
-        local raw_value=""
-        
-        # Skip empty lines and section headers
-        if [[ -z "$line" || "$line" =~ ^[[:space:]]*$ ]]; then
-            continue
-        fi
-        
-        if [[ "$line" =~ ^=.*=$ ]]; then
-            other_items+=("$line")
-            continue
-        fi
-        
-        if [[ "$line" =~ ^Error[[:space:]]counter[[:space:]]log: ]] || \
-           [[ "$line" =~ ^Errors[[:space:]]Corrected ]] || \
-           [[ "$line" =~ ^ECC[[:space:]] ]] || \
-           [[ "$line" =~ ^fast[[:space:]]\|[[:space:]]delayed ]] || \
-           [[ "$line" =~ ^read:[[:space:]] ]] || \
-           [[ "$line" =~ ^write:[[:space:]] ]] || \
-           [[ "$line" =~ ^verify:[[:space:]] ]]; then
-            other_items+=("$line")
-            continue
-        fi
-        
-        # Check for ID mappable patterns
-        for pattern in "${!smart_id_map[@]}"; do
-            if [[ "$line" =~ $pattern ]]; then
-                case "$pattern" in
-                    "Current Drive Temperature")
-                        # Extract temperature value: "Current Drive Temperature:     53 C"
-                        raw_value=$(echo "$line" | sed -n 's/.*:[[:space:]]*\([0-9]\+\).*/\1/p')
-                        ;;
-                    "Accumulated power on time")
-                        # Extract hours:minutes: "Accumulated power on time, hours:minutes 811:55"
-                        raw_value=$(echo "$line" | sed -n 's/.*[[:space:]]\([0-9]\+:[0-9]\+\).*/\1/p')
-                        ;;
-                    "Accumulated start-stop cycles")
-                        # Extract cycle count: "Accumulated start-stop cycles:  55"
-                        raw_value=$(echo "$line" | sed -n 's/.*:[[:space:]]*\([0-9]\+\).*/\1/p')
-                        ;;
-                    "Accumulated load-unload cycles")
-                        # Extract cycle count: "Accumulated load-unload cycles:  2569"
-                        raw_value=$(echo "$line" | sed -n 's/.*:[[:space:]]*\([0-9]\+\).*/\1/p')
-                        ;;
-                    "Elements in grown defect list")
-                        # Extract defect count: "Elements in grown defect list: 0"
-                        raw_value=$(echo "$line" | sed -n 's/.*:[[:space:]]*\([0-9]\+\).*/\1/p')
-                        ;;
-                esac
-                
-                # Only add to ID items if we successfully extracted a value
-                if [[ -n "$raw_value" ]]; then
-                    local id_attr="${smart_id_map[$pattern]}"
-                    local id_num=$(echo "$id_attr" | cut -d' ' -f1)
-                    local attr_name=$(echo "$id_attr" | cut -d' ' -f2)
-                    id_items+=("$id_num $attr_name $raw_value")
-                    matched=true
-                    break
-                fi
-            fi
-        done
-        
-        # Add unmatched items to other items
-        if [[ "$matched" == false ]]; then
-            other_items+=("$line")
-        fi
-        
-    done <<< "$scsi_output"
-    
-    # Output ID-assigned items (top section)
-    if [[ ${#id_items[@]} -gt 0 ]]; then
-        echo "ID#   ATTRIBUTE_NAME       RAW_VALUE"
-        for item in "${id_items[@]}"; do
-            printf "%-5s %-20s %s\n" $item
-        done
-        echo
-    fi
-    
-    # Output other items (bottom section)
-    if [[ ${#other_items[@]} -gt 0 ]]; then
-        echo "Other Attributes:"
-        for item in "${other_items[@]}"; do
-            echo "$item"
-        done
-    fi
-}
-
-# Integrate with _smartctl_auto function
+# smartctl wrapper: Try -d sat first, if fail then retry with -d scsi
 _smartctl_auto() {
     local args=("$@")
     local combined
     local keywords="Unknown|failed|Ambiguous|not supported"
     local has_H=false
-    
+
     # Try with SAT type first (-T permissive), capture both stdout and stderr
     combined=$("$smartctl" -d sat -T permissive "${args[@]}" 2>&1)
     local retcode=$?
-    
+
     # Check if the original arguments contain the -H (health status) option
     for arg in "${args[@]}"; do
         if [[ "$arg" == "-H" ]]; then
@@ -174,16 +71,15 @@ _smartctl_auto() {
             break
         fi
     done
-    
+
     # If SAT command failed and the output contains specific keywords, retry with SCSI
     if [[ $retcode -ne 0 && "$combined" =~ $keywords ]]; then
         if $has_H; then
             # Keep original arguments if -H is present
             "$smartctl" -d scsi -T permissive "${args[@]}"
         else
-            # Get SCSI output and process it
-            local scsi_raw_output=$("$smartctl" -d scsi -T permissive -a "/dev/$drive" | tail -n +19)
-            process_scsi_smart_output "$scsi_raw_output"
+            # Ignore original arguments and force full output for SCSI
+            "$smartctl" -d scsi -T permissive -a "/dev/$drive" | tail -n +19
         fi
         dtype="scsi"
         return $?
