@@ -41,9 +41,6 @@ smallfixnumber=$(/usr/syno/bin/synogetkeyvalue /etc.defaults/VERSION smallfixnum
 # Get DSM major version
 dsm=$(get_key_value /etc.defaults/VERSION majorversion)
 
-# Define device type (sat or scsi)
-dtype="sat"
-
 # Get smartctl location and check if version 7
 if which smartctl7 >/dev/null; then
     # smartmontools 7 from SynoCli Disk Tools is installed
@@ -53,85 +50,12 @@ else
     smartctl=$(which smartctl)
 fi
 
-debug() {
-    [[ $debug == "yes" ]] && echo "DEBUG: $*"
-}
-
-# smartctl wrapper: Try -d sat first, if fail then retry with -d scsi
-_smartctl_auto() {
-    local args=("$@")
-    local combined
-    local keywords="Unknown|failed|Ambiguous|not supported"
-    local has_H=false
-
-    debug "_smartctl_auto called with args: ${args[*]}"
-
-    # Try with SAT type first (-T permissive), capture both stdout and stderr
-    combined=$("$smartctl" -d sat -T permissive "${args[@]}" 2>&1)
-    local retcode=$?
-    debug "SAT attempt return code: $retcode"
-    debug "SAT output keyword matches: $(echo "$combined" | grep -E "$keywords" | wc -l)"
-
-    # Check if the original arguments contain the -H (health status) option
-    for arg in "${args[@]}"; do
-        if [[ "$arg" == "-H" ]]; then
-            has_H=true
-            break
-        fi
-    done
-
-    # If SAT command failed and the output contains specific keywords, retry with SCSI
-    if [[ $retcode -ne 0 && "$combined" =~ $keywords ]]; then
-        debug "Switching to SCSI mode"
-        if $has_H; then
-            # Keep original arguments if -H is present
-            "$smartctl" -d scsi -T permissive "${args[@]}"
-        else
-            # Ignore original arguments and force full output for SCSI
-            "$smartctl" -d scsi -T permissive -a "/dev/$drive" | tail -n +19
-        fi
-        dtype="scsi"
-        return $?
-    else
-        # Otherwise, output the result from the SAT run
-        echo "$combined"
-        dtype="sat"
-        return $retcode
-    fi
-}
-
-detect_dtype() {
-    debug "detect_dtype called for drive: $drive"
-
-    # 기본값: sat
-    local new_dtype="sat"
-
-    # smartctl -i 출력 확보
-    local info
-    if ! info=$("$smartctl" -i /dev/"$drive" 2>&1); then
-        debug "smartctl -i failed; keeping dtype=${new_dtype}"
-        dtype="$new_dtype"
-        echo "$dtype"
-        return
-    fi
-
-    # 판별: SAS > SATA 우선순위
-    if echo "$info" | grep -qE '(^|\s)SAS(\s|$)|Transport protocol:\s+SAS'; then
-        new_dtype="scsi"
-        debug "Detected SAS in smartctl -i output; set dtype=scsi"
-    elif echo "$info" | grep -qE '(^|\s)SATA(\s|$)|SATA Version is:'; then
-        new_dtype="sat"
-        debug "Detected SATA in smartctl -i output; set dtype=sat"
-    else
-        debug "Neither SAS nor SATA keywords found; keeping default dtype=${new_dtype}"
-    fi
-
-    dtype="$new_dtype"
-    echo "$dtype"
-}
-
 ding(){ 
     printf \\a
+}
+
+debug() {
+    [[ $debug == "yes" ]] && echo "DEBUG: $*"
 }
 
 usage(){ 
@@ -264,6 +188,20 @@ if ! printf "%s\n%s\n" "$tag" "$scriptver" |
 fi
 
 #------------------------------------------------------------------------------
+detect_dtype() {
+    # Default to SAT
+    local dtype="sat"
+
+    # If SAS appears at least once, treat as SCSI
+    if [ "$("$smartctl" -i /dev/"$drive" 2>/dev/null | grep -c SAS)" -gt 0 ]; then
+        dtype="scsi"
+    # Else if SATA appears at least once, treat as SAT
+    elif [ "$("$smartctl" -i /dev/"$drive" 2>/dev/null | grep -c SATA)" -gt 0 ]; then
+        dtype="sat"
+    fi
+
+    echo "$dtype"
+}
 
 get_drive_num(){ 
     drive_num=""
@@ -504,8 +442,8 @@ format_scsi_smart() {
 smart_all(){ 
     # Show all SMART attributes
     # $drive is sata1 or sda or usb1 etc
-    echo ""    
-    
+    echo ""
+
     local drive_type
     drive_type=$(detect_dtype)
     
@@ -515,29 +453,30 @@ smart_all(){
         return
     fi
     
-    # Handle SAT devices (existing code)
+    # Output aligned header
+    print_smart_header
+    
     if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
-        # Get all attributes, skip built-in header (first 6 lines), then drop "ID#" header
+        # Get all attributes, skip built-in header (first 6 lines), then drop “ID#” header
         readarray -t att_array < <(
-            _smartctl_auto -A -f brief \
-            -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 "/dev/$drive" \
-            | tail -n +7 | grep -v '^ID#'
-        )        
+            "$smartctl" -A -f brief -d sat -T permissive \
+                -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 "/dev/$drive" \
+            | tail -n +7 \
+            | grep -v '^ID#'
+        )
     else
         # Same for non-Seagate drives
         readarray -t att_array < <(
-            _smartctl_auto -A -f brief "/dev/$drive" \
-            | tail -n +7 | grep -v '^ID#'
+            "$smartctl" -A -f brief -d sat -T permissive "/dev/$drive" \
+            | tail -n +7 \
+            | grep -v '^ID#'
         )
     fi
-    
-    # Output aligned header for SAT devices
-    print_smart_header
     
     for strIn in "${att_array[@]}"; do
         # Remove lines containing ||||||_ to |______
         if ! echo "$strIn" | grep '|_' >/dev/null ; then
-            # Use Python-based formatting instead of original string cutting            
+            # Use Python-based formatting instead of original string cutting
             print_colored_smart_attribute "$strIn"
         fi
     done
@@ -565,7 +504,7 @@ show_health(){
     local att194
 
     # Show drive overall health
-    readarray -t health_array < <(_smartctl_auto -H /dev/"$drive" | tail -n +5)
+    readarray -t health_array < <("$smartctl" -H -d sat -T permissive /dev/"$drive" | tail -n +5)
     for strIn in "${health_array[@]}"; do
         if echo "$strIn" | awk '{print $1}' | grep -E '[0-9]' >/dev/null ||\
            echo "$strIn" | awk '{print $1}' | grep 'ID#' >/dev/null ; then
@@ -584,8 +523,6 @@ show_health(){
             if [[ -n "$strIn" ]]; then  # Don't echo blank line
                 if $(echo "$strIn" | grep -qi PASSED); then
                     echo -e "SMART overall-health self-assessment test result: ${LiteGreen}PASSED${Off}"
-                elif $(echo "$strIn" | grep -qi 'Health Status: OK'); then
-                    echo -e "SMART Health Status: ${LiteGreen}OK${Off}"
                 else
                     echo "$strIn"
                 fi
@@ -597,7 +534,7 @@ show_health(){
     #"$smartctl" -l error /dev/"$drive" | grep -iE 'error.*logg'
 
     # Retrieve Error Log and show error count
-    errlog="$(_smartctl_auto -l error /dev/"$drive" | grep -iE 'error.*logg')"
+    errlog="$("$smartctl" -l error /dev/"$drive" | grep -iE 'error.*logg')"
     errcount="$(echo "$errlog" | awk '{print $3}')"
     #echo "$errlog"
     if [[ $errcount -gt "0" ]]; then
@@ -609,16 +546,16 @@ show_health(){
     fi
 
     # Show SMART attributes
-    health=$(_smartctl_auto -H /dev/"$drive" | tail -n +5)
-    if ! echo "$health" | grep -E 'PASSED|Health Status: OK' >/dev/null || [[ $all == "yes" ]]; then
+    health=$("$smartctl" -H -d sat -T permissive /dev/"$drive" | tail -n +5)
+    if ! echo "$health" | grep PASSED >/dev/null || [[ $all == "yes" ]]; then
         # Show all SMART attributes if health != passed
         smart_all
     else
         # Show only important SMART attributes
         if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
-            readarray -t smart_atts < <(_smartctl_auto -A -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 /dev/"$drive")
+            readarray -t smart_atts < <("$smartctl" -A -d sat -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 /dev/"$drive")
         else
-            readarray -t smart_atts < <(_smartctl_auto -A /dev/"$drive")
+            readarray -t smart_atts < <("$smartctl" -A -d sat /dev/"$drive")
         fi
         # Decide if show airflow temperature
         if echo "${smart_atts[*]}" | grep -c '194 Temp' >/dev/null; then
@@ -856,9 +793,9 @@ for drive in "${drives[@]}"; do
         # DSM 7 or newer
 
         # Show SMART test status if SMART test running
-        percentleft=$(_smartctl_auto -a /dev/"$drive" | grep " Self-test routine in progress" | cut -d " " -f9-13)
+        percentleft=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f9-13)
         if [[ $percentleft ]]; then
-            hourselapsed=$(_smartctl_auto -a /dev/"$drive" | grep " Self-test routine in progress" | cut -d " " -f21)
+            hourselapsed=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f21)
             echo "Drive $model $serial $percentleft remaining, $hourselapsed hours elapsed."
         else
             # Show drive health
@@ -868,9 +805,9 @@ for drive in "${drives[@]}"; do
         # DSM 6 or older
 
         # Show SMART test status if SMART test running
-        percentdone=$(_smartctl_auto -a /dev/"$drive" | grep "ScanStatus" | cut -d " " -f9-13)        
+        percentdone=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "ScanStatus" | cut -d " " -f3-4)
         if [[ $percentdone ]]; then
-            hourselapsed=$(_smartctl_auto -a /dev/"$drive" | grep " Self-test routine in progress" | cut -d " " -f21)            
+            hourselapsed=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f21)
             echo "Drive $model $serial ${percentdone}% done."
         else
             # Show drive health
