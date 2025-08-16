@@ -383,9 +383,9 @@ format_scsi_smart() {
             scsi_ids+=(194); scsi_names+=("Current Drive Temperature"); scsi_values+=("$temp_value")
 
         elif [[ "$line" == *"Accumulated power on time, hours:minutes"* ]]; then
-            time_value=$(echo "$line" | awk -F': ' '{print $2}' | xargs)
+            time_value=$(echo "$line" | awk -F'Accumulated power on time, hours:minutes ' '{print $2}' | xargs)
             debug "Found power on time: '$time_value'"
-            scsi_ids+=(9); scsi_names+=("Accumulated power on time, hours:minutes"); scsi_values+=("$time_value")
+            scsi_ids+=(9); scsi_names+=("Accumulated power on time"); scsi_values+=("$time_value")
 
         elif [[ "$line" == *"Accumulated start-stop cycles:"* ]]; then
             cycle_value=$(echo "$line" | awk '{print $NF}')
@@ -435,7 +435,7 @@ format_scsi_smart() {
     printf "%-4s %-40s %s\n" "ID#" "ATTRIBUTE_NAME" "RAW_VALUE"
     for ((i=0; i<${#scsi_ids[@]}; i++)); do
         local id=${scsi_ids[i]} name=${scsi_names[i]} val=${scsi_values[i]}
-        if [[ $color != "no" && ( $id -eq 5 || $id -eq 193 || $id -eq 194 ) ]]; then
+        if [[ $color != "no" && ( $id -eq 5 ) ]]; then
             printf "${Yellow}%-4s %-40s %s${Off}\n" "$id" "$name" "$val"
         else
             printf "%-4s %-40s %s\n" "$id" "$name" "$val"
