@@ -449,6 +449,10 @@ smart_all(){
     
     if [ "$drive_type" = "scsi" ]; then
         # Handle SCSI devices with custom formatting
+        readarray -t att_array < <(
+            "$smartctl" -d scsi -T permissive -a "/dev/$drive" \
+            | tail -n +19
+        )
         format_scsi_smart "$drive"
         return
     fi
