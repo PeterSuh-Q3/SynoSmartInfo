@@ -459,24 +459,28 @@ smart_all(){
 
     # SAT / non-SCSI path
     print_smart_header
-
+    
     if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
+        # Get all attributes, skip built-in header (first 6 lines), then drop “ID#” header
         readarray -t att_array < <(
-            "$smartctl" -A -f brief \
+            "$smartctl" -A -f brief -d sat -T permissive \
                 -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 "/dev/$drive" \
             | tail -n +7 \
             | grep -v '^ID#'
         )
     else
+        # Same for non-Seagate drives
         readarray -t att_array < <(
-            "$smartctl" -A -f brief "/dev/$drive" \
+            "$smartctl" -A -f brief -d sat -T permissive "/dev/$drive" \
             | tail -n +7 \
             | grep -v '^ID#'
         )
     fi
-
+    
     for strIn in "${att_array[@]}"; do
-        if ! echo "$strIn" | grep '|\_' >/dev/null ; then
+        # Remove lines containing ||||||_ to |______
+        if ! echo "$strIn" | grep '|_' >/dev/null ; then
+            # Use Python-based formatting instead of original string cutting
             print_colored_smart_attribute "$strIn"
         fi
     done
