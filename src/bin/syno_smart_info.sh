@@ -507,8 +507,12 @@ show_health(){
     # $drive is sata1 or sda or usb1 etc
     local att194
 
+    # Decide device type (sat/scsi) via detect_dtype()
+    local drive_type
+    drive_type=$(detect_dtype)
+
     # Show drive overall health
-    readarray -t health_array < <("$smartctl" -H -d sat -T permissive /dev/"$drive" | tail -n +5)
+    readarray -t health_array < <("$smartctl" -H -d $drive_type -T permissive /dev/"$drive" | tail -n +5)
     for strIn in "${health_array[@]}"; do
         if echo "$strIn" | awk '{print $1}' | grep -E '[0-9]' >/dev/null ||\
            echo "$strIn" | awk '{print $1}' | grep 'ID#' >/dev/null ; then
@@ -527,6 +531,8 @@ show_health(){
             if [[ -n "$strIn" ]]; then  # Don't echo blank line
                 if $(echo "$strIn" | grep -qi PASSED); then
                     echo -e "SMART overall-health self-assessment test result: ${LiteGreen}PASSED${Off}"
+                elif $(echo "$strIn" | grep -qi 'Health Status: OK'); then
+                    echo -e "SMART Health Status: ${LiteGreen}OK${Off}"
                 else
                     echo "$strIn"
                 fi
