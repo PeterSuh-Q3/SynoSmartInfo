@@ -362,7 +362,7 @@ format_scsi_smart() {
     debug "format_scsi_smart called for drive: $drive"
 
     # Retrieve SCSI SMART output via wrapper; strip the leading header block
-    output=$(_smartctl_auto -a "/dev/$drive" | tail -n +19)
+    output=$("$smartctl" -a "/dev/$drive" | tail -n +19)
 
     debug "SCSI output (first 20 lines):"
     debug "$(echo "$output" | head -20)"
@@ -462,14 +462,14 @@ smart_all(){
 
     if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
         readarray -t att_array < <(
-            _smartctl_auto -A -f brief \
+            "$smartctl" -A -f brief \
                 -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 "/dev/$drive" \
             | tail -n +7 \
             | grep -v '^ID#'
         )
     else
         readarray -t att_array < <(
-            _smartctl_auto -A -f brief "/dev/$drive" \
+            "$smartctl" -A -f brief "/dev/$drive" \
             | tail -n +7 \
             | grep -v '^ID#'
         )
