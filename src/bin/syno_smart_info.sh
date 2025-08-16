@@ -382,13 +382,112 @@ print_smart_header() {
         "ID#" "ATTRIBUTE_NAME" "FLAGS" "VALUE" "WORST" "THRESH" "FAIL" "RAW_VALUE"
 }
 
+# SCSI SMART attribute formatting function
+format_scsi_smart() {
+    local drive="$1"
+    local output
+    
+    # Get SCSI smart output
+    output=$(_smartctl_auto -a "/dev/$drive" | tail -n +19)
+    
+    # Create arrays to store parsed data
+    declare -a scsi_ids=()
+    declare -a scsi_names=()
+    declare -a scsi_values=()
+    
+    # Parse SCSI output and map to standard IDs
+    while IFS= read -r line; do
+        if [[ "$line" =~ "Current Drive Temperature:" ]]; then
+            # Extract temperature value (just the number)
+            temp_value=$(echo "$line" | grep -o '[0-9]\+' | head -1)
+            scsi_ids+=(194)
+            scsi_names+=("Current Drive Temperature")
+            scsi_values+=("$temp_value")
+        elif [[ "$line" =~ "Accumulated power on time, hours:minutes" ]]; then
+            # Extract time value
+            time_value=$(echo "$line" | awk -F': ' '{print $2}')
+            scsi_ids+=(9)
+            scsi_names+=("Accumulated power on time, hours:minutes")
+            scsi_values+=("$time_value")
+        elif [[ "$line" =~ "Accumulated start-stop cycles:" ]]; then
+            # Extract cycle count
+            cycle_value=$(echo "$line" | awk '{print $NF}')
+            scsi_ids+=(4)
+            scsi_names+=("Accumulated start-stop cycles")
+            scsi_values+=("$cycle_value")
+        elif [[ "$line" =~ "Accumulated load-unload cycles:" ]]; then
+            # Extract load-unload count
+            load_value=$(echo "$line" | awk '{print $NF}')
+            scsi_ids+=(193)
+            scsi_names+=("Accumulated load-unload cycles")
+            scsi_values+=("$load_value")
+        elif [[ "$line" =~ "Elements in grown defect list:" ]]; then
+            # Extract defect count
+            defect_value=$(echo "$line" | awk '{print $NF}')
+            scsi_ids+=(5)
+            scsi_names+=("Elements in grown defect list")
+            scsi_values+=("$defect_value")
+        fi
+    done <<< "$output"
+    
+    # Sort arrays by ID (bubble sort for simplicity in bash)
+    local n=${#scsi_ids[@]}
+    for ((i=0; i<n-1; i++)); do
+        for ((j=0; j<n-i-1; j++)); do
+            if [ "${scsi_ids[j]}" -gt "${scsi_ids[j+1]}" ]; then
+                # Swap IDs
+                temp_id=${scsi_ids[j]}
+                scsi_ids[j]=${scsi_ids[j+1]}
+                scsi_ids[j+1]=$temp_id
+                
+                # Swap names
+                temp_name=${scsi_names[j]}
+                scsi_names[j]=${scsi_names[j+1]}
+                scsi_names[j+1]=$temp_name
+                
+                # Swap values
+                temp_value=${scsi_values[j]}
+                scsi_values[j]=${scsi_values[j+1]}
+                scsi_values[j+1]=$temp_value
+            fi
+        done
+    done
+    
+    # Output header (similar to print_smart_header function)
+    printf "%-4s %-40s %s\n" "ID#" "ATTRIBUTE_NAME" "RAW_VALUE"
+    
+    # Output formatted data
+    for ((i=0; i<${#scsi_ids[@]}; i++)); do
+        local id_num=${scsi_ids[i]}
+        local attr_name=${scsi_names[i]}
+        local raw_value=${scsi_values[i]}
+        
+        # Apply coloring for specific critical attributes (5, 193, 194)
+        if [[ $color != "no" && ($id_num -eq 5 || $id_num -eq 193 || $id_num -eq 194) ]]; then
+            printf "${Yellow}%-4s %-40s %s${Off}\n" "$id_num" "$attr_name" "$raw_value"
+        else
+            printf "%-4s %-40s %s\n" "$id_num" "$attr_name" "$raw_value"
+        fi
+    done
+}
+
 smart_all(){ 
     # Show all SMART attributes
     # $drive is sata1 or sda or usb1 etc
     echo ""    
     
+    local drive_type
+    drive_type=$(detect_dtype)
+    
+    if [ "$drive_type" = "scsi" ]; then
+        # Handle SCSI devices with custom formatting
+        format_scsi_smart "$drive"
+        return
+    fi
+    
+    # Handle SAT devices (existing code)
     if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
-        # Get all attributes, skip built-in header (first 6 lines), then drop “ID#” header
+        # Get all attributes, skip built-in header (first 6 lines), then drop "ID#" header
         readarray -t att_array < <(
             _smartctl_auto -A -f brief \
             -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 "/dev/$drive" \
@@ -401,11 +500,9 @@ smart_all(){
             | tail -n +7 | grep -v '^ID#'
         )
     fi
-
-    local drive_type
-    drive_type=$(detect_dtype)
-    # Output aligned header
-    [ "$drive_type" = "sat" ] && print_smart_header
+    
+    # Output aligned header for SAT devices
+    print_smart_header
     
     for strIn in "${att_array[@]}"; do
         # Remove lines containing ||||||_ to |______
