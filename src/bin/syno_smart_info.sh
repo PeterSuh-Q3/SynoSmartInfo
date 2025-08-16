@@ -188,6 +188,11 @@ else
     usage
 fi
 
+if [[ $debug == "yes" ]]; then
+    export PS4='+[$BASH_SOURCE:$LINENO] '
+    set -x
+fi
+
 # Shell Colors
 if [[ $color != "no" ]]; then
     #Black='\e[0;30m'     # ${Black}
