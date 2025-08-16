@@ -53,24 +53,25 @@ else
     smartctl=$(which smartctl)
 fi
 
+debug() {
+    [[ $debug == "yes" ]] && echo "DEBUG: $*"
+}
+
 # smartctl wrapper: Try -d sat first, if fail then retry with -d scsi
 _smartctl_auto() {
     local args=("$@")
     local combined
     local keywords="Unknown|failed|Ambiguous|not supported"
     local has_H=false
-    
-    [[ $debug == "yes" ]] && echo "DEBUG: _smartctl_auto called with args: ${args[*]}"
-    
+
+    debug "_smartctl_auto called with args: ${args[*]}"
+
     # Try with SAT type first (-T permissive), capture both stdout and stderr
     combined=$("$smartctl" -d sat -T permissive "${args[@]}" 2>&1)
     local retcode=$?
-    
-    [[ $debug == "yes" ]] && {
-        echo "DEBUG: SAT attempt return code: $retcode"
-        echo "DEBUG: SAT output contains keywords: $(echo "$combined" | grep -E "$keywords" | wc -l)"
-    }
-    
+    debug "SAT attempt return code: $retcode"
+    debug "SAT output keyword matches: $(echo "$combined" | grep -E "$keywords" | wc -l)"
+
     # Check if the original arguments contain the -H (health status) option
     for arg in "${args[@]}"; do
         if [[ "$arg" == "-H" ]]; then
@@ -78,10 +79,10 @@ _smartctl_auto() {
             break
         fi
     done
-    
+
     # If SAT command failed and the output contains specific keywords, retry with SCSI
     if [[ $retcode -ne 0 && "$combined" =~ $keywords ]]; then
-        [[ $debug == "yes" ]] && echo "DEBUG: Switching to SCSI mode"
+        debug "Switching to SCSI mode"
         if $has_H; then
             # Keep original arguments if -H is present
             "$smartctl" -d scsi -T permissive "${args[@]}"
@@ -100,21 +101,18 @@ _smartctl_auto() {
 }
 
 detect_dtype() {
-    [[ $debug == "yes" ]] && echo "DEBUG: detect_dtype called for drive: $drive"
-    
+    debug "detect_dtype called for drive: $drive"
+
     # Capture both stdout and stderr
     local smartctl_output
     smartctl_output=$(_smartctl_auto -i /dev/"$drive" 2>&1)
     local retcode=$?
-    
-    [[ $debug == "yes" ]] && {
-        echo "DEBUG: smartctl return code: $retcode"
-        echo "DEBUG: smartctl output (first 10 lines):"
-        echo "$smartctl_output" | head -10
-        echo "DEBUG: dtype set to: $dtype"
-        echo "DEBUG: =================="
-    }
-    
+
+    debug "smartctl return code: $retcode"
+    debug "smartctl output (first 10 lines):"
+    debug "$(echo "$smartctl_output" | head -10)"
+    debug "dtype now: $dtype"
+
     echo "$dtype"
 }
 
@@ -186,11 +184,6 @@ if options="$(getopt -o abcdefghijklmnopqrstuvwxyz0123456789 -l \
 else
     echo
     usage
-fi
-
-if [[ $debug == "yes" ]]; then
-    export PS4='+[$BASH_SOURCE:$LINENO] '
-    set -x
 fi
 
 # Shell Colors
@@ -413,121 +406,87 @@ print_smart_header() {
 format_scsi_smart() {
     local drive="$1"
     local output
-    
-    [[ $debug == "yes" ]] && echo "DEBUG: format_scsi_smart called for drive: $drive"
-    
-    # Get SCSI smart output
+
+    debug "format_scsi_smart called for drive: $drive"
+
+    # Get SCSI smart output (strip smartctl header by tail -n +19)
     output=$(_smartctl_auto -a "/dev/$drive" | tail -n +19)
-    
-    [[ $debug == "yes" ]] && {
-        echo "DEBUG: SCSI output (first 20 lines):"
-        echo "$output" | head -20
-        echo "DEBUG: =================="
-    }
-    
-    # Create arrays to store parsed data
+
+    debug "SCSI output (first 20 lines):"
+    debug "$(echo "$output" | head -20)"
+
+    # Arrays to hold parsed items
     declare -a scsi_ids=()
     declare -a scsi_names=()
     declare -a scsi_values=()
-    
-    # Parse SCSI output and map to standard IDs
+
+    # Parse lines
     while IFS= read -r line; do
-        [[ $debug == "yes" ]] && echo "DEBUG: Processing line: '$line'"
-        
+        debug "Processing line: '$line'"
+
         if [[ "$line" =~ "Current Drive Temperature:" ]]; then
-            # Extract temperature value (just the number)
+            # Extract temperature number only
             temp_value=$(echo "$line" | grep -o '[0-9]\+' | head -1)
-            [[ $debug == "yes" ]] && echo "DEBUG: Found temperature: $temp_value"
-            scsi_ids+=(194)
-            scsi_names+=("Current Drive Temperature")
-            scsi_values+=("$temp_value")
+            debug "Found temperature: $temp_value"
+            scsi_ids+=(194); scsi_names+=("Current Drive Temperature"); scsi_values+=("$temp_value")
         elif [[ "$line" =~ "Accumulated power on time, hours:minutes" ]]; then
-            # Extract time value
             time_value=$(echo "$line" | awk -F': ' '{print $2}' | xargs)
-            [[ $debug == "yes" ]] && echo "DEBUG: Found power on time: '$time_value'"
-            scsi_ids+=(9)
-            scsi_names+=("Accumulated power on time, hours:minutes")
-            scsi_values+=("$time_value")
+            debug "Found power on time: '$time_value'"
+            scsi_ids+=(9); scsi_names+=("Accumulated power on time, hours:minutes"); scsi_values+=("$time_value")
         elif [[ "$line" =~ "Accumulated start-stop cycles:" ]]; then
-            # Extract cycle count
             cycle_value=$(echo "$line" | awk '{print $NF}')
-            [[ $debug == "yes" ]] && echo "DEBUG: Found start-stop cycles: $cycle_value"
-            scsi_ids+=(4)
-            scsi_names+=("Accumulated start-stop cycles")
-            scsi_values+=("$cycle_value")
+            debug "Found start-stop cycles: $cycle_value"
+            scsi_ids+=(4); scsi_names+=("Accumulated start-stop cycles"); scsi_values+=("$cycle_value")
         elif [[ "$line" =~ "Accumulated load-unload cycles:" ]]; then
-            # Extract load-unload count
             load_value=$(echo "$line" | awk '{print $NF}')
-            [[ $debug == "yes" ]] && echo "DEBUG: Found load-unload cycles: $load_value"
-            scsi_ids+=(193)
-            scsi_names+=("Accumulated load-unload cycles")
-            scsi_values+=("$load_value")
+            debug "Found load-unload cycles: $load_value"
+            scsi_ids+=(193); scsi_names+=("Accumulated load-unload cycles"); scsi_values+=("$load_value")
         elif [[ "$line" =~ "Elements in grown defect list:" ]]; then
-            # Extract defect count
             defect_value=$(echo "$line" | awk '{print $NF}')
-            [[ $debug == "yes" ]] && echo "DEBUG: Found defect list elements: $defect_value"
-            scsi_ids+=(5)
-            scsi_names+=("Elements in grown defect list")
-            scsi_values+=("$defect_value")
+            debug "Found defect list elements: $defect_value"
+            scsi_ids+=(5); scsi_names+=("Elements in grown defect list"); scsi_values+=("$defect_value")
         fi
     done <<< "$output"
-    
-    [[ $debug == "yes" ]] && {
-        echo "DEBUG: Found ${#scsi_ids[@]} attributes"
-        for ((i=0; i<${#scsi_ids[@]}; i++)); do
-            echo "DEBUG: ID=${scsi_ids[i]}, Name='${scsi_names[i]}', Value='${scsi_values[i]}'"
-        done
-    }
-    
-    # Check if we found any attributes
+
+    debug "Found ${#scsi_ids[@]} attributes"
+    for ((i=0; i<${#scsi_ids[@]}; i++)); do
+        debug "ID=${scsi_ids[i]}, Name='${scsi_names[i]}', Value='${scsi_values[i]}'"
+    done
+
     if [[ ${#scsi_ids[@]} -eq 0 ]]; then
-        [[ $debug == "yes" ]] && echo "DEBUG: No SCSI attributes found, showing raw output"
+        debug "No SCSI attributes found, showing raw output"
         echo "No SCSI attributes found in expected format"
-        echo "Raw SCSI output:"
         echo "$output"
         return
     fi
-    
-    # Sort arrays by ID (bubble sort for simplicity in bash)
+
+    # Sort by ID (bubble sort for simplicity)
     local n=${#scsi_ids[@]}
     for ((i=0; i<n-1; i++)); do
         for ((j=0; j<n-i-1; j++)); do
-            if [ "${scsi_ids[j]}" -gt "${scsi_ids[j+1]}" ]; then
-                # Swap IDs
-                temp_id=${scsi_ids[j]}
-                scsi_ids[j]=${scsi_ids[j+1]}
-                scsi_ids[j+1]=$temp_id
-                
-                # Swap names
-                temp_name=${scsi_names[j]}
-                scsi_names[j]=${scsi_names[j+1]}
-                scsi_names[j+1]=$temp_name
-                
-                # Swap values
-                temp_value=${scsi_values[j]}
-                scsi_values[j]=${scsi_values[j+1]}
-                scsi_values[j+1]=$temp_value
+            if [[ ${scsi_ids[j]} -gt ${scsi_ids[j+1]} ]]; then
+                # swap id
+                tmp=${scsi_ids[j]}; scsi_ids[j]=${scsi_ids[j+1]}; scsi_ids[j+1]=$tmp
+                # swap name
+                tmp=${scsi_names[j]}; scsi_names[j]=${scsi_names[j+1]}; scsi_names[j+1]=$tmp
+                # swap value
+                tmp=${scsi_values[j]}; scsi_values[j]=${scsi_values[j+1]}; scsi_values[j+1]=$tmp
             fi
         done
     done
-    
-    # Output header (similar to print_smart_header function)
+
+    # Output (SCSI 전용 요약 헤더)
     printf "%-4s %-40s %s\n" "ID#" "ATTRIBUTE_NAME" "RAW_VALUE"
-    
-    # Output formatted data
     for ((i=0; i<${#scsi_ids[@]}; i++)); do
-        local id_num=${scsi_ids[i]}
-        local attr_name=${scsi_names[i]}
-        local raw_value=${scsi_values[i]}
-        
-        # Apply coloring for specific critical attributes (5, 193, 194)
-        if [[ $color != "no" && ($id_num -eq 5 || $id_num -eq 193 || $id_num -eq 194) ]]; then
-            printf "${Yellow}%-4s %-40s %s${Off}\n" "$id_num" "$attr_name" "$raw_value"
+        local id=${scsi_ids[i]} name=${scsi_names[i]} val=${scsi_values[i]}
+        if [[ $color != "no" && ( $id -eq 5 || $id -eq 193 || $id -eq 194 ) ]]; then
+            printf "${Yellow}%-4s %-40s %s${Off}\n" "$id" "$name" "$val"
         else
-            printf "%-4s %-40s %s\n" "$id_num" "$attr_name" "$raw_value"
+            printf "%-4s %-40s %s\n" "$id" "$name" "$val"
         fi
     done
 }
+
 smart_all(){ 
     # Show all SMART attributes
     # $drive is sata1 or sda or usb1 etc
