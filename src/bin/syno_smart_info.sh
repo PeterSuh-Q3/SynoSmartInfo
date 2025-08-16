@@ -354,14 +354,14 @@ print_smart_header() {
         "ID#" "ATTRIBUTE_NAME" "FLAGS" "VALUE" "WORST" "THRESH" "FAIL" "RAW_VALUE"
 }
 
-# SCSI SMART attribute formatting function with debug output
+# SCSI SMART attribute formatting function (uses SCSI-only parsing)
 format_scsi_smart() {
     local drive="$1"
     local output
 
     debug "format_scsi_smart called for drive: $drive"
 
-    # Get SCSI smart output (strip smartctl header by tail -n +19)
+    # Retrieve SCSI SMART output via wrapper; strip the leading header block
     output=$(_smartctl_auto -a "/dev/$drive" | tail -n +19)
 
     debug "SCSI output (first 20 lines):"
@@ -372,28 +372,32 @@ format_scsi_smart() {
     declare -a scsi_names=()
     declare -a scsi_values=()
 
-    # Parse lines
+    # Parse 5 patterns and map to standard IDs
     while IFS= read -r line; do
         debug "Processing line: '$line'"
 
-        if [[ "$line" =~ "Current Drive Temperature:" ]]; then
+        if [[ "$line" == *"Current Drive Temperature:"* ]]; then
             # Extract temperature number only
             temp_value=$(echo "$line" | grep -o '[0-9]\+' | head -1)
             debug "Found temperature: $temp_value"
             scsi_ids+=(194); scsi_names+=("Current Drive Temperature"); scsi_values+=("$temp_value")
-        elif [[ "$line" =~ "Accumulated power on time, hours:minutes" ]]; then
+
+        elif [[ "$line" == *"Accumulated power on time, hours:minutes"* ]]; then
             time_value=$(echo "$line" | awk -F': ' '{print $2}' | xargs)
             debug "Found power on time: '$time_value'"
             scsi_ids+=(9); scsi_names+=("Accumulated power on time, hours:minutes"); scsi_values+=("$time_value")
-        elif [[ "$line" =~ "Accumulated start-stop cycles:" ]]; then
+
+        elif [[ "$line" == *"Accumulated start-stop cycles:"* ]]; then
             cycle_value=$(echo "$line" | awk '{print $NF}')
             debug "Found start-stop cycles: $cycle_value"
             scsi_ids+=(4); scsi_names+=("Accumulated start-stop cycles"); scsi_values+=("$cycle_value")
-        elif [[ "$line" =~ "Accumulated load-unload cycles:" ]]; then
+
+        elif [[ "$line" == *"Accumulated load-unload cycles:"* ]]; then
             load_value=$(echo "$line" | awk '{print $NF}')
             debug "Found load-unload cycles: $load_value"
             scsi_ids+=(193); scsi_names+=("Accumulated load-unload cycles"); scsi_values+=("$load_value")
-        elif [[ "$line" =~ "Elements in grown defect list:" ]]; then
+
+        elif [[ "$line" == *"Elements in grown defect list:"* ]]; then
             defect_value=$(echo "$line" | awk '{print $NF}')
             debug "Found defect list elements: $defect_value"
             scsi_ids+=(5); scsi_names+=("Elements in grown defect list"); scsi_values+=("$defect_value")
@@ -427,7 +431,7 @@ format_scsi_smart() {
         done
     done
 
-    # Output (SCSI 전용 요약 헤더)
+    # Output (SCSI-only summary header and rows)
     printf "%-4s %-40s %s\n" "ID#" "ATTRIBUTE_NAME" "RAW_VALUE"
     for ((i=0; i<${#scsi_ids[@]}; i++)); do
         local id=${scsi_ids[i]} name=${scsi_names[i]} val=${scsi_values[i]}
@@ -439,48 +443,40 @@ format_scsi_smart() {
     done
 }
 
-smart_all(){ 
-    # Show all SMART attributes
-    # $drive is sata1 or sda or usb1 etc
+smart_all(){
     echo ""
 
+    # Decide device type (sat/scsi) via detect_dtype()
     local drive_type
     drive_type=$(detect_dtype)
-    
-    if [ "$drive_type" = "scsi" ]; then
-        # Handle SCSI devices with custom formatting
-        readarray -t att_array < <(
-            "$smartctl" -d scsi -T permissive -a "/dev/$drive" \
-            | tail -n +19
-        )
+
+    if [[ "$drive_type" == "scsi" ]]; then
+        # SCSI path: do not print SAT header or use SAT python formatter.
+        # Let the dedicated SCSI formatter read and parse directly.
         format_scsi_smart "$drive"
         return
     fi
-    
-    # Output aligned header
+
+    # SAT / non-SCSI path
     print_smart_header
-    
+
     if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
-        # Get all attributes, skip built-in header (first 6 lines), then drop “ID#” header
         readarray -t att_array < <(
-            "$smartctl" -A -f brief -d sat -T permissive \
+            _smartctl_auto -A -f brief \
                 -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 "/dev/$drive" \
             | tail -n +7 \
             | grep -v '^ID#'
         )
     else
-        # Same for non-Seagate drives
         readarray -t att_array < <(
-            "$smartctl" -A -f brief -d sat -T permissive "/dev/$drive" \
+            _smartctl_auto -A -f brief "/dev/$drive" \
             | tail -n +7 \
             | grep -v '^ID#'
         )
     fi
-    
+
     for strIn in "${att_array[@]}"; do
-        # Remove lines containing ||||||_ to |______
-        if ! echo "$strIn" | grep '|_' >/dev/null ; then
-            # Use Python-based formatting instead of original string cutting
+        if ! echo "$strIn" | grep '|\_' >/dev/null ; then
             print_colored_smart_attribute "$strIn"
         fi
     done
