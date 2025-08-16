@@ -103,16 +103,30 @@ _smartctl_auto() {
 detect_dtype() {
     debug "detect_dtype called for drive: $drive"
 
-    # Capture both stdout and stderr
-    local smartctl_output
-    smartctl_output=$(_smartctl_auto -i /dev/"$drive" 2>&1)
-    local retcode=$?
+    # 기본값: sat
+    local new_dtype="sat"
 
-    debug "smartctl return code: $retcode"
-    debug "smartctl output (first 10 lines):"
-    debug "$(echo "$smartctl_output" | head -10)"
-    debug "dtype now: $dtype"
+    # smartctl -i 출력 확보
+    local info
+    if ! info=$("$smartctl" -i /dev/"$drive" 2>&1); then
+        debug "smartctl -i failed; keeping dtype=${new_dtype}"
+        dtype="$new_dtype"
+        echo "$dtype"
+        return
+    fi
 
+    # 판별: SAS > SATA 우선순위
+    if echo "$info" | grep -qE '(^|\s)SAS(\s|$)|Transport protocol:\s+SAS'; then
+        new_dtype="scsi"
+        debug "Detected SAS in smartctl -i output; set dtype=scsi"
+    elif echo "$info" | grep -qE '(^|\s)SATA(\s|$)|SATA Version is:'; then
+        new_dtype="sat"
+        debug "Detected SATA in smartctl -i output; set dtype=sat"
+    else
+        debug "Neither SAS nor SATA keywords found; keeping default dtype=${new_dtype}"
+    fi
+
+    dtype="$new_dtype"
     echo "$dtype"
 }
 
