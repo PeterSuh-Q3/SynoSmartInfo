@@ -12,9 +12,6 @@ mkdir -p "$LOG_DIR"
 # 실행 정보 저장 파일 (이전 값 보관용) - 유지하려면 /volume1/log 에 함께 저장
 DATA_FILE="${LOG_DIR}/smart_id199_counts.txt"
 
-# 로그 저장 디렉토리 (날짜별 JSON 파일)
-SMARTCTL="/usr/bin/smartctl"
-
 # 오늘 날짜 기반 로그 파일명
 TODAY=$(date '+%Y-%m-%d')
 LOG_FILE="${LOG_DIR}/smart_id199_history_${TODAY}.json"
@@ -23,6 +20,25 @@ DISKS=$(ls /dev/sd? /dev/sata? 2>/dev/null)
 
 declare -A prev_counts
 first_run=false
+
+is_seagate(){
+    DEVICE=$("$SMARTCTL" -A -i "${1}" | awk -F ' ' '/Device Model/{print $3}')
+    if [[ "${DEVICE:0:2}" == "ST" ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Get smartctl location and check if version 7
+if which smartctl7 >/dev/null; then
+    # smartmontools 7 from SynoCli Disk Tools is installed
+    SMARTCTL=$(which smartctl7)
+    smartversion=7
+else
+    SMARTCTL=$(which smartctl)
+    smartversion=6
+fi
 
 # 이전 값 불러오기 (시리얼 넘버 기반)
 if [ -f "$DATA_FILE" ]; then
@@ -40,11 +56,23 @@ declare -A serial_to_disk
 timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 
 for disk in $DISKS; do
+  # Check if a Seagate drive
+  if is_seagate "$disk"; then
+      seagate="yes"
+  else
+      seagate=
+  fi
+    
   smart_info=$($SMARTCTL -i "$disk" 2>/dev/null)
   
   # 모델명과 시리얼 넘버 추출
-  model=$(echo "$smart_info" | grep -i '^Product:' | sed 's/Product:\s*//')
-  serial=$(echo "$smart_info" | grep -i '^Serial number:' | sed 's/Serial number:\s*//')
+  if [[ $seagate == "yes" ]]; then
+    model=$(echo "$smart_info" | grep -i '^Device Model:' | sed 's/Device Model:\s*//')
+    serial=$(echo "$smart_info" | grep -i '^Serial Number:' | sed 's/Serial Number:\s*//')
+  else
+    model=$(echo "$smart_info" | grep -i '^Product:' | sed 's/Product:\s*//')
+    serial=$(echo "$smart_info" | grep -i '^Serial number:' | sed 's/Serial number:\s*//')
+  fi
   
   # 시리얼 넘버가 없으면 해당 디스크 건너뛰기
   if [ -z "$serial" ]; then
@@ -72,7 +100,7 @@ for disk in $DISKS; do
   
   # 알림 (최초 실행 제외)
   if [ "$first_run" = false ] && [ "$diff" -gt 0 ]; then
-    text="[시놀로지 UDMA_CRC 감지] $disk (모델: $model, S/N: $serial)에서 199 UDMA_CRC 증가 $diff회 발생"
+    text="[Synology UDMA_CRC detection] $disk 199 UDMA_CRC increments occurred $diff times in (MODEL: $model, S/N: $serial)"
     curl -s --data "chat_id=${CHAT_ID}&text=${text}" "${URL}" > /dev/null 2>&1
   fi
 done
@@ -82,7 +110,3 @@ done
 for serial in "${!new_counts[@]}"; do
   echo "$serial ${new_counts[$serial]}" >> "$DATA_FILE"
 done
-
-# 권한 설정 (root 전용)
-chmod 600 "$LOG_FILE" "$DATA_FILE"
-chown root:root "$LOG_FILE" "$DATA_FILE"
