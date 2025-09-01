@@ -1,23 +1,23 @@
 #!/bin/bash
 
-BOT_TOKEN=""
-CHAT_ID=""
+BOT_TOKEN="${1}"
+CHAT_ID="${2}"
 URL="https://api.telegram.org/bot${BOT_TOKEN}/sendMessage"
 
+LOG_DIR="/usr/mshell/smartlogs"
+
+# 로그 디렉토리 생성 (없으면 생성)
+mkdir -p "$LOG_DIR"
+
 # 실행 정보 저장 파일 (이전 값 보관용) - 유지하려면 /volume1/log 에 함께 저장
-DATA_FILE="/volume1/log/smart_id199_counts.txt"
+DATA_FILE="${LOG_DIR}/smart_id199_counts.txt"
 
 # 로그 저장 디렉토리 (날짜별 JSON 파일)
-LOG_DIR="/volume1/log/smart_logs"
-
 SMARTCTL="/usr/bin/smartctl"
 
 # 오늘 날짜 기반 로그 파일명
 TODAY=$(date '+%Y-%m-%d')
 LOG_FILE="${LOG_DIR}/smart_id199_history_${TODAY}.json"
-
-# 로그 디렉토리 생성 (없으면 생성)
-mkdir -p "$LOG_DIR"
 
 DISKS=$(ls /dev/sd? /dev/sata? 2>/dev/null)
 
