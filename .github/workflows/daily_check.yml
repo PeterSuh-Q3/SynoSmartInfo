@@ -60,7 +60,7 @@ jobs:
             fi
       
             echo "Version mismatch detected. Triggering SynoSmartInfo.yml workflow..."
-            #gh workflow run SynoSmartInfo.yml
+            gh workflow run SynoSmartInfo.yml
           else
             echo "Versions match. No action needed."
           fi
