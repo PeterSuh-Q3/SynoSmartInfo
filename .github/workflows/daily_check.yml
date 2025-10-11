@@ -32,3 +32,5 @@ jobs:
           else
             echo "Versions match. No action needed."
           fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
