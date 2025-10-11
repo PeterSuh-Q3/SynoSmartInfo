@@ -1,0 +1,36 @@
+name: Build n Release Synology Smart Info Package
+
+on:
+  release:
+    types: [published]
+
+  workflow_dispatch:
+    
+jobs:
+    build-spk:
+        name: Build Package
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                arch: ['kvmx64']
+                dsm: ['7.0','7.1','7.2']
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            - name: Get latest release tag from 007revad/Synology_SMART_info
+              id: get_tag
+              run: |
+                latest_tag=$(curl -s https://api.github.com/repos/007revad/Synology_SMART_info/releases/latest | jq -r .tag_name)
+                echo "Latest tag: $latest_tag"
+                echo "tag=$latest_tag" >> $GITHUB_OUTPUT
+            - name: Update scriptversion in package.json
+              run: |
+                jq --arg tag "${{ steps.get_tag.outputs.tag }}" '.scriptversion = $tag' package.json > tmp.json && mv tmp.json package.json
+            - name: Commit updated package.json
+              run: |
+                git config --global user.name "github-actions"
+                git config --global user.email "github-actions@github.com"
+                git add package.json
+                git commit -m "Update scriptversion to ${{ steps.get_tag.outputs.tag }}"
+                git push
