@@ -1,8 +1,8 @@
 {
   "package": "Syno-Smart-Info",
   "name": "Synosmartinfo",
-  "version": "1.2.5",
-  "scriptversion": "v1.3.18",
+  "version": "v1.2.5",
+  "scriptversion": "v1.3.19",
   "description": "Syno Smart Info Checking Tool with Web API",
   "target": "./src",
   "install_type": "package",
