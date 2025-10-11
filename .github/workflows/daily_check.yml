@@ -1,0 +1,34 @@
+name: Daily Check for Scriptversion Update
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'  # 매일 자정 UTC 기준 실행
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get latest release tag from 007revad/Synology_SMART_info
+        id: get_tag
+        run: |
+          latest_tag=$(curl -s https://api.github.com/repos/007revad/Synology_SMART_info/releases/latest | jq -r .tag_name)
+          echo "latest_tag=$latest_tag" >> $GITHUB_OUTPUT
+
+      - name: Get current scriptversion from package.json
+        id: get_scriptversion
+        run: |
+          current_version=$(jq -r '.scriptversion' package.json)
+          echo "current_version=$current_version" >> $GITHUB_OUTPUT
+
+      - name: Compare versions and trigger SynoSmartInfo.yml if different
+        run: |
+          if [ "${{ steps.get_tag.outputs.latest_tag }}" != "${{ steps.get_scriptversion.outputs.current_version }}" ]; then
+            echo "Version mismatch detected. Triggering SynoSmartInfo.yml workflow..."
+            gh workflow run SynoSmartInfo.yml
+          else
+            echo "Versions match. No action needed."
+          fi
