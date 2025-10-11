@@ -38,15 +38,15 @@ jobs:
       - name: Get current scriptversion from package.json
         id: get_scriptversion
         run: |
-          current_version=$(jq -r '.scriptversion' package.json)
+          current_version=$(jq -r '.scriptversion' script.json)
           echo "current_version=$current_version" >> $GITHUB_OUTPUT
 
       - name: Compare versions and trigger SynoSmartInfo.yml if different
         run: |
           if [ "${{ steps.get_tag.outputs.latest_tag }}" != "${{ steps.get_scriptversion.outputs.current_version }}" ]; then
             echo "Update scriptversion in package.json"
-            jq --arg tag "${{ steps.get_tag.outputs.latest_tag }}" '.scriptversion = $tag' package.json > tmp.json && mv tmp.json package.json
-            jq --arg newtag "${{ steps.get_latest_tag.outputs.new_tag }}" '.version = $newtag' package.json > tmp.json && mv tmp.json package.json
+            jq --arg tag "${{ steps.get_tag.outputs.latest_tag }}" '.scriptversion = $tag' package.json > tmp.json && mv tmp.json script.json
+            jq --arg newtag "${{ steps.get_latest_tag.outputs.new_tag }}" '.version = ($newtag | sub("^v"; ""))' package.json > tmp.json && mv tmp.json package.json
       
             echo "Commit updated package.json"
             git config --global user.name "github-actions"
