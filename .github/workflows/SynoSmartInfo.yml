@@ -40,22 +40,6 @@ jobs:
         run: |
           curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh -o ./src/bin/syno_smart_info.sh
 
-      - name: Update scriptversion in package.json
-        run: |
-          jq --arg tag "${{ steps.get_latest_tag.outputs.new_tag }}" '.scriptversion = $tag' package.json > tmp.json && mv tmp.json package.json
-
-      - name: Commit updated package.json
-        run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-          git add package.json
-          if ! git diff --cached --quiet; then
-            git commit -m "Update scriptversion to ${{ steps.get_latest_tag.outputs.new_tag }}"
-            git push
-          else
-            echo "No changes to commit."
-          fi
-
       - name: Synology Package Builder Github Action
         uses: tomgrv/synology-package-builder@v1.3.0
         with:
