@@ -28,13 +28,13 @@ jobs:
         run: |
           if [ "${{ steps.get_tag.outputs.latest_tag }}" != "${{ steps.get_scriptversion.outputs.current_version }}" ]; then
             echo "Update scriptversion in package.json"
-            jq --arg tag "${{ steps.get_latest_tag.outputs.new_tag }}" '.scriptversion = $tag' package.json > tmp.json && mv tmp.json package.json
+            jq --arg tag "${{ steps.get_tag.outputs.latest_tag }}" '.scriptversion = $latest_tag' package.json > tmp.json && mv tmp.json package.json
             echo "Commit updated package.json"
             git config --global user.name "github-actions"
             git config --global user.email "github-actions@github.com"
             git add package.json
             if ! git diff --cached --quiet; then
-              git commit -m "Update scriptversion to ${{ steps.get_latest_tag.outputs.new_tag }}"
+              git commit -m "Update scriptversion to ${{ steps.get_tag.outputs.latest_tag }}"
               git push
             else
               echo "No changes to commit."
