@@ -47,7 +47,7 @@ jobs:
             echo "Update scriptversion in script.json,package.json"
             jq --arg tag "${{ steps.get_tag.outputs.latest_tag }}" '.scriptversion = $tag' script.json > tmp.json && mv tmp.json script.json            
             jq --arg newtag "${{ steps.get_latest_tag.outputs.new_tag }}" '.version = $newtag' package.json > tmp.json && mv tmp.json package.json
-                  echo "Commit updated package.json"
+            echo "Commit updated package.json"
             git config --global user.name "github-actions"
             git config --global user.email "github-actions@github.com"
             git add script.json
