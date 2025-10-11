@@ -2,7 +2,7 @@
   "package": "Syno-Smart-Info",
   "name": "Synosmartinfo",
   "version": "1.2.5",
-  "description": "Syno Smart Info Checking Tool with Web API https://github.com/PeterSuh-Q3/SynoSmartInfo/releases",
+  "description": "Syno Smart Info Checking Tool with Web API \nhttps://github.com/PeterSuh-Q3/SynoSmartInfo/releases",
   "target": "./src",
   "install_type": "package",
   "dsmuidir": "ui",
