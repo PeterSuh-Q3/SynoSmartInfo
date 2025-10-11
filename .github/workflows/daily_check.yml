@@ -44,21 +44,16 @@ jobs:
       - name: Compare versions and trigger SynoSmartInfo.yml if different
         run: |
           if [ "${{ steps.get_tag.outputs.latest_tag }}" != "${{ steps.get_scriptversion.outputs.current_version }}" ]; then
-            echo "Update scriptversion in package.json"
-            jq --arg tag "${{ steps.get_tag.outputs.latest_tag }}" '.scriptversion = $tag' package.json > tmp.json && mv tmp.json script.json
-            jq --arg newtag "${{ steps.get_latest_tag.outputs.new_tag }}" '.version = ($newtag | sub("^v"; ""))' package.json > tmp.json && mv tmp.json package.json
-      
-            echo "Commit updated package.json"
-            git config --global user.name "github-actions"
-            git config --global user.email "github-actions@github.com"
-            git add package.json
+            echo "Update scriptversion in script.json,package.json"
             if ! git diff --cached --quiet; then
+              jq --arg tag "${{ steps.get_tag.outputs.latest_tag }}" '.scriptversion = $tag' script.json > tmp.json && mv tmp.json script.json
               git commit -m "Update scriptversion to ${{ steps.get_tag.outputs.latest_tag }}"
+              jq --arg newtag "${{ steps.get_latest_tag.outputs.new_tag }}" '.version = ($newtag | sub("^v"; ""))' package.json > tmp.json && mv tmp.json package.json
+              git commit -m "Update scriptversion to ${{ steps.get_latest_tag.outputs.new_tag }}"              
               git push
             else
               echo "No changes to commit."
             fi
-      
             echo "Version mismatch detected. Triggering SynoSmartInfo.yml workflow..."
             gh workflow run SynoSmartInfo.yml
           else
