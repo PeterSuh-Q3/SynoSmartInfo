@@ -1,4 +1,4 @@
-name: Build n Release Synology Smart Info Package
+name: Update Smart Info Package script release tag
 
 on:
   release:
