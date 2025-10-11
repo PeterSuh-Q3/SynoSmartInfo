@@ -1,8 +1,8 @@
 {
   "package": "Syno-Smart-Info",
   "name": "Synosmartinfo",
-  "version": "1.2.4",
-  "description": "Syno Smart Info Checking Tool with Web API",
+  "version": "1.2.5",
+  "description": "Syno Smart Info Checking Tool with Web API https://github.com/PeterSuh-Q3/SynoSmartInfo/releases",
   "target": "./src",
   "install_type": "package",
   "dsmuidir": "ui",
@@ -13,8 +13,8 @@
   "synology": {
     "maintainer": "PeterSuh-Q3,007revad",
     "maintainer_url": "https://github.com/PeterSuh-Q3",
-    "distributor": "PeterSuh-Q3",
-    "distributor_url": "https://github.com/PeterSuh-Q3/SynoSmartInfo",
+    "distributor": "https://github.com/PeterSuh-Q3/SynoSmartInfo/releases",
+    "distributor_url": "https://github.com/PeterSuh-Q3/SynoSmartInfo/releases",
     "support_url": "https://github.com/PeterSuh-Q3/SynoSmartInfo/issues",
     "help_url": "https://github.com/PeterSuh-Q3/SynoSmartInfo#README.md",
     "os_min_ver": "7.0-40337",
