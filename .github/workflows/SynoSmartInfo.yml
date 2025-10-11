@@ -32,9 +32,12 @@ jobs:
                 git config --global user.name "github-actions"
                 git config --global user.email "github-actions@github.com"
                 git add package.json
-                git commit -m "Update scriptversion to ${{ steps.get_tag.outputs.tag }}"
-                git push
-              
+                if ! git diff --cached --quiet; then
+                  git commit -m "Update scriptversion to ${{ steps.get_tag.outputs.tag }}"
+                  git push
+                else
+                  echo "No changes to commit."
+                fi                  
             - name: Download newest syno_smart_info.sh
               run: |
                 curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh -o ./src/bin/syno_smart_info.sh
