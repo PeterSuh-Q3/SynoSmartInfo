@@ -3,66 +3,84 @@ name: Build n Release Synology Smart Info Package
 on:
   release:
     types: [published]
-
   workflow_dispatch:
-    
+
 jobs:
-    build-spk:
-        name: Build Package
-        runs-on: ubuntu-latest
-        strategy:
-            fail-fast: false
-            matrix:
-                arch: ['kvmx64']
-                dsm: ['7.0','7.1','7.2']
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v4
-            - name: Get latest release tag from 007revad/Synology_SMART_info
-              id: get_tag
-              run: |
-                latest_tag=$(curl -s https://api.github.com/repos/007revad/Synology_SMART_info/releases/latest | jq -r .tag_name)
-                echo "Latest tag: $latest_tag"
-                echo "tag=$latest_tag" >> $GITHUB_OUTPUT
-            - name: Update scriptversion in package.json
-              run: |
-                jq --arg tag "${{ steps.get_tag.outputs.tag }}" '.scriptversion = $tag' package.json > tmp.json && mv tmp.json package.json
-            - name: Commit updated package.json
-              run: |
-                git config --global user.name "github-actions"
-                git config --global user.email "github-actions@github.com"
-                git add package.json
-                if ! git diff --cached --quiet; then
-                  git commit -m "Update scriptversion to ${{ steps.get_tag.outputs.tag }}"
-                  git push
-                else
-                  echo "No changes to commit."
-                fi                  
-            - name: Download newest syno_smart_info.sh
-              run: |
-                curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh -o ./src/bin/syno_smart_info.sh
-            - name: Synology Package Builder Github Action
-              uses: tomgrv/synology-package-builder@v1.3.0
-              with:
-                  dsm: ${{ matrix.dsm }}
-                  arch: ${{ matrix.arch }}
-                  output: ./dist
-            - name: Remove debug spk and rename package
-              run: |
-                ls -l ./dist
-                rm ./dist/*_debug.spk
-                for f in ./dist/*.spk; do
-                  mv "$f" "${f%.spk}-${{ matrix.dsm }}.spk"
-                done
-                ls -l ./dist
-            - name: Upload Package
-              uses: actions/upload-artifact@v4
-              with:
-                  name: SynoSmartInfo-${{ matrix.dsm }}
-                  path: ./dist/*.spk
-            - name: Release
-              uses: softprops/action-gh-release@v2
-              with:
-                tag_name: ${{ inputs.version }}
-                files: |
-                  ./dist/*.spk
+  build-spk:
+    name: Build Package
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ['kvmx64']
+        dsm: ['7.0','7.1','7.2']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get latest release tag from PeterSuh-Q3/SynoSmartInfo
+        id: get_latest_tag
+        run: |
+          latest_tag=$(curl -s https://api.github.com/repos/PeterSuh-Q3/SynoSmartInfo/releases/latest | jq -r .tag_name)
+          echo "Latest tag: $latest_tag"
+          major=$(echo $latest_tag | cut -d. -f1 | tr -d 'v')
+          minor=$(echo $latest_tag | cut -d. -f2)
+          patch=$(echo $latest_tag | cut -d. -f3)
+          if [ "$patch" -lt 9 ]; then
+            patch=$((patch + 1))
+          else
+            patch=0
+            minor=$((minor + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}"
+          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+
+      - name: Get latest syno_smart_info.sh
+        run: |
+          curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh -o ./src/bin/syno_smart_info.sh
+
+      - name: Update scriptversion in package.json
+        run: |
+          jq --arg tag "${{ steps.get_latest_tag.outputs.new_tag }}" '.scriptversion = $tag' package.json > tmp.json && mv tmp.json package.json
+
+      - name: Commit updated package.json
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add package.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update scriptversion to ${{ steps.get_latest_tag.outputs.new_tag }}"
+            git push
+          else
+            echo "No changes to commit."
+          fi
+
+      - name: Synology Package Builder Github Action
+        uses: tomgrv/synology-package-builder@v1.3.0
+        with:
+          dsm: ${{ matrix.dsm }}
+          arch: ${{ matrix.arch }}
+          output: ./dist
+
+      - name: Remove debug spk and rename package
+        run: |
+          ls -l ./dist
+          rm ./dist/*_debug.spk
+          for f in ./dist/*.spk; do
+            mv "$f" "${f%.spk}-${{ matrix.dsm }}.spk"
+          done
+          ls -l ./dist
+
+      - name: Upload Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: SynoSmartInfo-${{ matrix.dsm }}
+          path: ./dist/*.spk
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_latest_tag.outputs.new_tag }}
+          files: |
+            ./dist/*.spk
