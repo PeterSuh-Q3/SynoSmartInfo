@@ -18,6 +18,23 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@v4
+            - name: Get latest release tag from 007revad/Synology_SMART_info
+              id: get_tag
+              run: |
+                latest_tag=$(curl -s https://api.github.com/repos/007revad/Synology_SMART_info/releases/latest | jq -r .tag_name)
+                echo "Latest tag: $latest_tag"
+                echo "tag=$latest_tag" >> $GITHUB_OUTPUT
+            - name: Update scriptversion in package.json
+              run: |
+                jq --arg tag "${{ steps.get_tag.outputs.tag }}" '.scriptversion = $tag' package.json > tmp.json && mv tmp.json package.json
+            - name: Commit updated package.json
+              run: |
+                git config --global user.name "github-actions"
+                git config --global user.email "github-actions@github.com"
+                git add package.json
+                git commit -m "Update scriptversion to ${{ steps.get_tag.outputs.tag }}"
+                git push
+              
             - name: Download newest syno_smart_info.sh
               run: |
                 curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh -o ./src/bin/syno_smart_info.sh
