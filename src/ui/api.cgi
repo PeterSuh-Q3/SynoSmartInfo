@@ -172,7 +172,7 @@ run)
                 log "[ERROR] SMART script failed: $LAST_ERROR"
             fi
             ;;
-        ""|"-a")
+        ""|"-a"|"-i")
             # 기존 Finished 대기 루프 방식
             if [ ! -x "${SMART_SCRIPT}" ]; then
                 json_response false "Smart script not found or not executable" ""
