@@ -29,7 +29,7 @@ chmod 0440 /etc/sudoers.d/Synosmartinfo
 
 <img width="640" height="358" alt="introducing-synology-custom-package-syno-smart-info-v0-8kct095tw5hf1" src="https://github.com/user-attachments/assets/f3134377-c274-45f7-a8af-2a6a062701e8" />
 
-
+<img width="1257" height="612" alt="스크린샷 2025-10-25 오전 12 17 34" src="https://github.com/user-attachments/assets/1bc92481-41f8-47dd-8bcb-1d876a0b1677" />
 
 <img width="640" height="986" alt="introducing-synology-custom-package-syno-smart-info-v0-44mjssa6x5hf1" src="https://github.com/user-attachments/assets/b1da273e-8118-4219-8148-795861aa7a9c" />
 
