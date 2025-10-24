@@ -5,6 +5,9 @@
 [![License](https://img.shields.io/badge/License-MIT-blue)](#license)
 [![issues - SynoSmartInfo](https://img.shields.io/github/issues/PeterSuh-Q3/SynoSmartInfo)](https://github.com/PeterSuh-Q3/SynoSmartInfo/issues)
 
+[Introduction and detailed explanation of Syno Smart Info]
+https://www.reddit.com/r/synology/comments/1mgi44b/introducing_synology_custom_package_syno_smart/
+
 # < Caution >
 
 Synosmartinfo synology user must be granted the authority to process with sudoers.
