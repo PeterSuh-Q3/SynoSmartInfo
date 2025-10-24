@@ -27,6 +27,14 @@ echo "synosmartinfo ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/Synosmartinfo
 chmod 0440 /etc/sudoers.d/Synosmartinfo
 ```
 
+<img width="640" height="358" alt="introducing-synology-custom-package-syno-smart-info-v0-8kct095tw5hf1" src="https://github.com/user-attachments/assets/f3134377-c274-45f7-a8af-2a6a062701e8" />
+
+
+
+<img width="640" height="986" alt="introducing-synology-custom-package-syno-smart-info-v0-44mjssa6x5hf1" src="https://github.com/user-attachments/assets/b1da273e-8118-4219-8148-795861aa7a9c" />
+
+<img width="1080" height="982" alt="introducing-synology-custom-package-syno-smart-info-v0-owm8qcbww5hf1" src="https://github.com/user-attachments/assets/cbcb34e9-a359-48fc-ac37-7dd2a2f2c2f3" />
+
 ## License
 
 This repository is licensed under the [MIT License](LICENSE).
