@@ -47,6 +47,20 @@ jobs:
           arch: ${{ matrix.arch }}
           output: ./dist
 
+      - name: Add dsmappname to INFO
+        run: |
+          for f in ./dist/*.spk; do
+            [[ "$f" == *_debug.spk ]] && continue
+            tmpdir=$(mktemp -d)
+            tar -xf "$f" -C "$tmpdir"
+            APPID=$(jq -r '.[] | keys[]' src/ui/config)
+            if ! grep -q "dsmappname" "$tmpdir/INFO"; then
+              sed -i "s/dsmuidir=\"ui\"/dsmuidir=\"ui\"\ndsmappname=\"$APPID\"/" "$tmpdir/INFO"
+            fi
+            tar -cf "$f" -C "$tmpdir" $(ls "$tmpdir")
+            rm -rf "$tmpdir"
+          done
+
       - name: Remove debug spk and rename package
         run: |
           ls -l ./dist
