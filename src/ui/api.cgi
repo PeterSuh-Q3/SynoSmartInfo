@@ -81,13 +81,22 @@ json_escape() {
 }
 
 json_response() {
-    local ok="$1" msg="$2" data="$3"
+    local ok="$1" msg="$2" data="$3" sudoers_missing="${4:-false}"
     local msg_json=$(echo "$msg" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().strip()))')
     if [ -z "$data" ]; then
-        echo "{\"success\":$ok, \"message\":$msg_json, \"result\":null}"
+        echo "{\"success\":$ok, \"message\":$msg_json, \"result\":null, \"sudoers_missing\":$sudoers_missing}"
     else
         local data_json=$(json_escape "$data")
-        echo "{\"success\":$ok, \"message\":$msg_json, \"result\":$data_json}"
+        echo "{\"success\":$ok, \"message\":$msg_json, \"result\":$data_json, \"sudoers_missing\":$sudoers_missing}"
+    fi
+}
+
+# 공통 sudoers 체크 함수 (액션 처리 위에 추가)
+check_sudoers() {
+    if [ ! -f "/etc/sudoers.d/Synosmartinfo" ]; then
+        echo "true"
+    else
+        echo "false"
     fi
 }
 
@@ -168,7 +177,8 @@ run)
             else
                 LAST_ERROR=$(tail -20 "$TMP_STDERR" | tail -c 2000 | sed ':a;N;$!ba;s/\n/\\n/g')
                 [ -z "$LAST_ERROR" ] && LAST_ERROR="Unknown error or no error output"
-                json_response false "SMART script failed" "$LAST_ERROR"
+                SUDOERS_MISSING=$(check_sudoers)
+                json_response false "SMART script failed" "$LAST_ERROR" "$SUDOERS_MISSING"
                 log "[ERROR] SMART script failed: $LAST_ERROR"
             fi
             ;;
@@ -216,7 +226,8 @@ run)
             else
                 LAST_ERROR=$(tail -20 "$TMP_STDERR" | tail -c 2000 | sed ':a;N;$!ba;s/\n/\\n/g')
                 [ -z "$LAST_ERROR" ] && LAST_ERROR="Unknown error or no error output"
-                json_response false "SMART scan failed" "$LAST_ERROR"
+                SUDOERS_MISSING=$(check_sudoers)
+                json_response false "SMART scan failed" "$LAST_ERROR" "$SUDOERS_MISSING"
                 log "[ERROR] SMART scan failed: $LAST_ERROR"
             fi
             ;;
