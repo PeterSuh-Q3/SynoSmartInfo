@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 1      
       matrix:
         arch: ['kvmx64']
         dsm: ['7.0','7.1','7.2','7.3']
@@ -40,12 +41,26 @@ jobs:
         run: |
           curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh -o ./src/bin/syno_smart_info.sh
 
-      - name: Synology Package Builder Github Action
-        uses: tomgrv/synology-package-builder@v1.3.0
+      - name: Synology Package Builder (with retries)
+        uses: nick-fields/retry@v3
         with:
-          dsm: ${{ matrix.dsm }}
-          arch: ${{ matrix.arch }}
-          output: ./dist
+          timeout_minutes: 120
+          max_attempts: 3
+          retry_wait_seconds: 60
+          command: |
+            docker run --rm \
+              -v "${{ github.workspace }}:/workspace" \
+              -w /workspace \
+              -e DSM="${{ matrix.dsm }}" \
+              -e ARCH="${{ matrix.arch }}" \
+              ghcr.io/tomgrv/synology-package-builder:v1.3.0
+        
+      #- name: Synology Package Builder Github Action
+      #  uses: tomgrv/synology-package-builder@v1.3.0
+      #  with:
+      #    dsm: ${{ matrix.dsm }}
+      #    arch: ${{ matrix.arch }}
+      #    output: ./dist
 
       - name: Add dsmappname to INFO
         run: |
