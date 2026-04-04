@@ -1,5 +1,4 @@
 name: Build n Release Synology Smart Info Package
-
 on:
   release:
     types: [published]
@@ -11,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 1      
+      max-parallel: 1
       matrix:
         arch: ['kvmx64']
         dsm: ['7.3','7.2','7.1','7.0']
@@ -20,6 +19,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ── 1. syno_smart_info.sh 캐시 (하루 단위) ──────────────────
+      - name: Cache syno_smart_info.sh
+        id: cache_smart_sh
+        uses: actions/cache@v4
+        with:
+          path: ./src/bin/syno_smart_info.sh
+          key: syno-smart-info-sh-${{ runner.os }}-${{ hashFiles('**/syno_smart_info.sh') }}-${{ github.run_id }}
+          restore-keys: |
+            syno-smart-info-sh-${{ runner.os }}-
+
+      - name: Get latest syno_smart_info.sh
+        if: steps.cache_smart_sh.outputs.cache-hit != 'true'
+        run: |
+          curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh \
+            -o ./src/bin/syno_smart_info.sh
+
+      # ── 2. Docker 레이어 캐시 ────────────────────────────────────
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: docker-${{ runner.os }}-synology-package-builder-v1.3.0
+          restore-keys: |
+            docker-${{ runner.os }}-synology-package-builder-
+
+      - name: Pull & cache builder image
+        run: |
+          docker pull ghcr.io/tomgrv/synology-package-builder:v1.3.0 || true
+
+      # ── 3. 최신 릴리즈 태그 조회 ────────────────────────────────
       - name: Get latest release tag from PeterSuh-Q3/SynoSmartInfo
         id: get_latest_tag
         run: |
@@ -37,32 +66,28 @@ jobs:
           new_tag="v${major}.${minor}.${patch}"
           echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
 
-      - name: Get latest syno_smart_info.sh
-        run: |
-          curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh -o ./src/bin/syno_smart_info.sh
+      # ── 4. 빌드 결과물 캐시 ─────────────────────────────────────
+      - name: Cache dist packages
+        id: cache_dist
+        uses: actions/cache@v4
+        with:
+          path: ./dist
+          key: dist-${{ matrix.arch }}-${{ matrix.dsm }}-${{ hashFiles('src/**') }}
+          restore-keys: |
+            dist-${{ matrix.arch }}-${{ matrix.dsm }}-
 
-      #- name: Synology Package Builder (with retries)
-      #  uses: nick-fields/retry@v3
-      #  with:
-      #    timeout_minutes: 120
-      #    max_attempts: 3
-      #    retry_wait_seconds: 60
-      #    command: |
-      #      docker run --rm \
-      #        -v "${{ github.workspace }}:/workspace" \
-      #        -w /workspace \
-      #        -e DSM="${{ matrix.dsm }}" \
-      #        -e ARCH="${{ matrix.arch }}" \
-      #        ghcr.io/tomgrv/synology-package-builder:v1.3.0
-        
+      # ── 5. 패키지 빌드 ──────────────────────────────────────────
       - name: Synology Package Builder Github Action
+        if: steps.cache_dist.outputs.cache-hit != 'true'
         uses: tomgrv/synology-package-builder@v1.3.0
         with:
           dsm: ${{ matrix.dsm }}
           arch: ${{ matrix.arch }}
           output: ./dist
 
+      # ── 6. INFO 패치 ────────────────────────────────────────────
       - name: Add dsmappname to INFO
+        if: steps.cache_dist.outputs.cache-hit != 'true'
         run: |
           for f in ./dist/*.spk; do
             [[ "$f" == *_debug.spk ]] && continue
@@ -76,7 +101,9 @@ jobs:
             rm -rf "$tmpdir"
           done
 
+      # ── 7. debug spk 제거 및 파일명 정리 ────────────────────────
       - name: Remove debug spk and rename package
+        if: steps.cache_dist.outputs.cache-hit != 'true'
         run: |
           ls -l ./dist
           rm ./dist/*_debug.spk
@@ -85,7 +112,9 @@ jobs:
           done
           ls -l ./dist
 
+      # ── 8. noarch 패키지 생성 ────────────────────────────────────
       - name: Create noarch package
+        if: steps.cache_dist.outputs.cache-hit != 'true'
         run: |
           for f in ./dist/Synosmartinfo-x86_64-*.spk; do
             noarch="${f/x86_64/noarch}"
@@ -96,13 +125,15 @@ jobs:
             rm -rf "$tmpdir"
           done
           ls -l ./dist
-          
+
+      # ── 9. 아티팩트 업로드 ──────────────────────────────────────
       - name: Upload Package
         uses: actions/upload-artifact@v4
         with:
           name: SynoSmartInfo-${{ matrix.dsm }}
           path: ./dist/*.spk
 
+      # ── 10. 릴리즈 ──────────────────────────────────────────────
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
