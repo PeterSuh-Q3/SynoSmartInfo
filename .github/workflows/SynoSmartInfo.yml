@@ -70,6 +70,18 @@ jobs:
           done
           ls -l ./dist
 
+      - name: Create noarch package
+        run: |
+          for f in ./dist/Synosmartinfo-x86_64-*.spk; do
+            noarch="${f/x86_64/noarch}"
+            tmpdir=$(mktemp -d)
+            tar -xf "$f" -C "$tmpdir"
+            sed -i 's/arch="x86_64"/arch="noarch"/' "$tmpdir/INFO"
+            tar -cf "$noarch" -C "$tmpdir" $(ls "$tmpdir")
+            rm -rf "$tmpdir"
+          done
+          ls -l ./dist
+          
       - name: Upload Package
         uses: actions/upload-artifact@v4
         with:
