@@ -19,36 +19,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── 1. syno_smart_info.sh 캐시 (하루 단위) ──────────────────
-      - name: Cache syno_smart_info.sh
-        id: cache_smart_sh
-        uses: actions/cache@v4
-        with:
-          path: ./src/bin/syno_smart_info.sh
-          key: syno-smart-info-sh-${{ runner.os }}-${{ hashFiles('**/syno_smart_info.sh') }}-${{ github.run_id }}
-          restore-keys: |
-            syno-smart-info-sh-${{ runner.os }}-
-
-      - name: Get latest syno_smart_info.sh
-        if: steps.cache_smart_sh.outputs.cache-hit != 'true'
-        run: |
-          curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh \
-            -o ./src/bin/syno_smart_info.sh
-
-      # ── 2. Docker 레이어 캐시 ────────────────────────────────────
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: docker-${{ runner.os }}-synology-package-builder-v1.3.0
-          restore-keys: |
-            docker-${{ runner.os }}-synology-package-builder-
-
-      - name: Pull & cache builder image
-        run: |
-          docker pull ghcr.io/tomgrv/synology-package-builder:v1.3.0 || true
-
-      # ── 3. 최신 릴리즈 태그 조회 ────────────────────────────────
+      # ── 1. 최신 릴리즈 태그 조회 ────────────────────────────────
       - name: Get latest release tag from PeterSuh-Q3/SynoSmartInfo
         id: get_latest_tag
         run: |
@@ -65,6 +36,25 @@ jobs:
           fi
           new_tag="v${major}.${minor}.${patch}"
           echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+
+      # ── 2. syno_smart_info.sh 다운로드 (원래 로직 유지) ─────────
+      - name: Get latest syno_smart_info.sh
+        run: |
+          curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh \
+            -o ./src/bin/syno_smart_info.sh
+
+      # ── 3. Docker 레이어 캐시 ────────────────────────────────────
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: docker-${{ runner.os }}-synology-package-builder-v1.3.0
+          restore-keys: |
+            docker-${{ runner.os }}-synology-package-builder-
+
+      - name: Pull & cache builder image
+        run: |
+          docker pull ghcr.io/tomgrv/synology-package-builder:v1.3.0 || true
 
       # ── 4. 빌드 결과물 캐시 ─────────────────────────────────────
       - name: Cache dist packages
