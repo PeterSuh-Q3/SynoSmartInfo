@@ -5,21 +5,13 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-spk:
-    name: Build Package
+  # ── 태그 계산 전용 job (1회만 실행) ────────────────────────────
+  prepare:
+    name: Prepare Release Tag
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        arch: ['kvmx64']
-        dsm: ['7.3','7.2','7.1','7.0']
-
+    outputs:
+      new_tag: ${{ steps.get_latest_tag.outputs.new_tag }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # ── 1. 최신 릴리즈 태그 조회 ────────────────────────────────
       - name: Get latest release tag from PeterSuh-Q3/SynoSmartInfo
         id: get_latest_tag
         run: |
@@ -37,13 +29,27 @@ jobs:
           new_tag="v${major}.${minor}.${patch}"
           echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
 
-      # ── 2. syno_smart_info.sh 다운로드 (원래 로직 유지) ─────────
+  # ── 빌드 job (매트릭스별 실행) ─────────────────────────────────
+  build-spk:
+    name: Build Package
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        arch: ['kvmx64']
+        dsm: ['7.3','7.2','7.1','7.0']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Get latest syno_smart_info.sh
         run: |
           curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh \
             -o ./src/bin/syno_smart_info.sh
 
-      # ── 3. Docker 레이어 캐시 ────────────────────────────────────
       - name: Cache Docker layers
         uses: actions/cache@v4
         with:
@@ -56,7 +62,6 @@ jobs:
         run: |
           docker pull ghcr.io/tomgrv/synology-package-builder:v1.3.0 || true
 
-      # ── 4. 빌드 결과물 캐시 ─────────────────────────────────────
       - name: Cache dist packages
         id: cache_dist
         uses: actions/cache@v4
@@ -66,7 +71,6 @@ jobs:
           restore-keys: |
             dist-${{ matrix.arch }}-${{ matrix.dsm }}-
 
-      # ── 5. 패키지 빌드 ──────────────────────────────────────────
       - name: Synology Package Builder Github Action
         if: steps.cache_dist.outputs.cache-hit != 'true'
         uses: tomgrv/synology-package-builder@v1.3.0
@@ -75,7 +79,6 @@ jobs:
           arch: ${{ matrix.arch }}
           output: ./dist
 
-      # ── 6. INFO 패치 ────────────────────────────────────────────
       - name: Add dsmappname to INFO
         if: steps.cache_dist.outputs.cache-hit != 'true'
         run: |
@@ -91,7 +94,6 @@ jobs:
             rm -rf "$tmpdir"
           done
 
-      # ── 7. debug spk 제거 및 파일명 정리 ────────────────────────
       - name: Remove debug spk and rename package
         if: steps.cache_dist.outputs.cache-hit != 'true'
         run: |
@@ -102,7 +104,6 @@ jobs:
           done
           ls -l ./dist
 
-      # ── 8. noarch 패키지 생성 ────────────────────────────────────
       - name: Create noarch package
         if: steps.cache_dist.outputs.cache-hit != 'true'
         run: |
@@ -116,17 +117,15 @@ jobs:
           done
           ls -l ./dist
 
-      # ── 9. 아티팩트 업로드 ──────────────────────────────────────
       - name: Upload Package
         uses: actions/upload-artifact@v4
         with:
           name: SynoSmartInfo-${{ matrix.dsm }}
           path: ./dist/*.spk
 
-      # ── 10. 릴리즈 ──────────────────────────────────────────────
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.get_latest_tag.outputs.new_tag }}
+          tag_name: ${{ needs.prepare.outputs.new_tag }}  # prepare job의 태그 재사용
           files: |
             ./dist/*.spk
