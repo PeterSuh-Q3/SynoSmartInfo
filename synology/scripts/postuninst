@@ -1,8 +1,17 @@
 #!/bin/bash
+#
+# SynoSmartInfo post-uninstallation script
+#
 
-# 심볼릭 링크 제거
 PKG_NAME=$(basename "$SYNOPKG_PKGDEST")
-rm -f /usr/syno/synoman/webman/3rdparty/$PKG_NAME
+
+# ── 1. Web UI 심볼릭 링크 제거 ───────────────────────────────────────
+rm -f "/usr/syno/synoman/webman/3rdparty/$PKG_NAME"
+
+# ── 2. 소켓 및 PID 파일 정리 ────────────────────────────────────────
+rm -f "/var/run/synosmartinfo/helper.sock"
+rm -f "/var/run/synosmartinfo/helper.pid"
+# 소켓 디렉터리가 비어 있으면 삭제
+rmdir "/var/run/synosmartinfo" 2>/dev/null || true
 
 exit 0
-

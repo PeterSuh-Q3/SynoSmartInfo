@@ -1,10 +1,14 @@
 #!/bin/bash
 
 #########################################################################
-# Synology SMART Info API - CGI API (generate_smart_result.sh 내용 내부 통합)
+# Synology SMART Info API - CGI endpoint
+#
+# Runs as the non-root package user (synosmartinfo).
+# Privileged SMART operations are delegated to smart_helper via Unix
+# domain socket — no sudo required.
 #########################################################################
 
-# --------- 1. 공통 변수 및 경로 계산 ---------------------------------
+# --------- 1. 경로 상수 --------------------------------------------------
 
 PKG_NAME="Synosmartinfo"
 PKG_ROOT="/var/packages/${PKG_NAME}"
@@ -14,11 +18,9 @@ LOG_FILE="${LOG_DIR}/api.log"
 BIN_DIR="${TARGET_DIR}/bin"
 RESULT_DIR="/usr/syno/synoman/webman/3rdparty/${PKG_NAME}/result"
 RESULT_FILE="${RESULT_DIR}/smart.result"
-
-SMART_SCRIPT="${BIN_DIR}/syno_smart_info.sh"
+SMART_CLIENT="${BIN_DIR}/smart_client.py"
 
 mkdir -p "${LOG_DIR}" "${RESULT_DIR}"
-
 touch "${LOG_FILE}"
 chmod 644 "${LOG_FILE}"
 chmod 755 "${RESULT_DIR}"
@@ -27,15 +29,15 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "${LOG_FILE}"
 }
 
-# --------- 3. HTTP 헤더 출력 ----------------------------------------
+# --------- 2. HTTP 헤더 -------------------------------------------------
 
 echo "Content-Type: application/json; charset=utf-8"
 echo "Access-Control-Allow-Origin: *"
 echo "Access-Control-Allow-Methods: GET, POST"
 echo "Access-Control-Allow-Headers: Content-Type"
-echo "" # 헤더/바디 구분 빈줄
+echo ""
 
-# --------- 4. URL-encoded 파라미터 파싱 ------------------------------
+# --------- 3. URL-encoded 파라미터 파싱 ----------------------------------
 
 urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
 declare -A PARAM
@@ -74,31 +76,26 @@ ACTION="${PARAM[action]}"
 OPTION="${PARAM[option]}"
 log "Request: ACTION=${ACTION}, OPTION=[${OPTION}]"
 
-# --------- 5. JSON 유틸 함수 ----------------------------------------
+# --------- 4. JSON 유틸 함수 --------------------------------------------
 
 json_escape() {
     echo "$1" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'
 }
 
 json_response() {
-    local ok="$1" msg="$2" data="$3" sudoers_missing="${4:-false}"
-    local msg_json=$(echo "$msg" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().strip()))')
+    local ok="$1" msg="$2" data="$3"
+    local msg_json
+    msg_json=$(echo "$msg" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().strip()))')
     if [ -z "$data" ]; then
-        echo "{\"success\":$ok, \"message\":$msg_json, \"result\":null, \"sudoers_missing\":$sudoers_missing}"
+        echo "{\"success\":${ok}, \"message\":${msg_json}, \"result\":null}"
     else
-        local data_json=$(json_escape "$data")
-        echo "{\"success\":$ok, \"message\":$msg_json, \"result\":$data_json, \"sudoers_missing\":$sudoers_missing}"
+        local data_json
+        data_json=$(json_escape "$data")
+        echo "{\"success\":${ok}, \"message\":${msg_json}, \"result\":${data_json}}"
     fi
 }
 
-# 공통 sudoers 체크 함수 (액션 처리 위에 추가)
-check_sudoers() {
-    if [ ! -f "/etc/sudoers.d/Synosmartinfo" ]; then
-        echo "true"
-    else
-        echo "false"
-    fi
-}
+# --------- 5. 시스템 정보 함수 ------------------------------------------
 
 clean_system_string() {
     local input="$1"
@@ -135,108 +132,89 @@ get_system_info() {
     python3 -c "
 import json
 print(json.dumps({
-'MODEL': '$model',
-'PLATFORM': '$platform',
-'DSM_VERSION': '$version',
-'Update': '$smallfix'
+    'MODEL': '$model',
+    'PLATFORM': '$platform',
+    'DSM_VERSION': '$version',
+    'Update': '$smallfix'
 }))"
 }
 
-# --------- 8. 액션 처리 -------------------------------------------
+# --------- 6. Helper 통신 함수 ------------------------------------------
+# smart_client.py 를 통해 Unix domain socket 으로 smart_helper 에 요청.
+# 항상 JSON 문자열을 stdout 으로 반환한다.
+
+call_helper() {
+    local action="$1"
+    local option="$2"
+    python3 "${SMART_CLIENT}" "${action}" "${option}"
+}
+
+# helper 응답 JSON 에서 필드를 추출하는 헬퍼 (stdin 으로 JSON 수신)
+extract_field() {
+    local field="$1"
+    python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('${field}',''))"
+}
+
+# --------- 7. 액션 처리 -------------------------------------------------
 
 case "${ACTION}" in
+
 info)
-    log "[DEBUG] Getting system information"
+    log "[INFO] Getting system information"
     DATA="$(get_system_info)"
     json_response true "System information retrieved" "${DATA}"
     ;;
 
 run)
+    # 허용 옵션 화이트리스트 검증 (api.cgi 레벨 — helper 도 독립적으로 검증)
     case "${OPTION}" in
-        "-v"|"-h")
-            # Finished 대기 없이 바로 실행 + 출력
-            if [ ! -x "${SMART_SCRIPT}" ]; then
-                json_response false "Smart script not found or not executable" ""
-                log "[ERROR] Smart script not found or not executable"
-                exit 0
-            fi
-    
-            TMP_RESULT="${RESULT_FILE}.tmp"
-            TMP_STDERR="${LOG_DIR}/last_smart_stderr.log"
-            rm -f "$TMP_RESULT" "$TMP_STDERR"
-    
-            timeout 30 sudo "${SMART_SCRIPT}" "$OPTION" > "$TMP_RESULT" 2> "$TMP_STDERR"
-            sleep 0.3  # 300ms 정도 대기
-            RET=$?
-    
-            if [ $RET -eq 0 ] && [ -s "$TMP_RESULT" ]; then
-                mv "$TMP_RESULT" "${RESULT_FILE}"
-                chmod 644 "${RESULT_FILE}"
-                SMART_RESULT="$(cat "${RESULT_FILE}")"
-                json_response true "SMART script output" "$SMART_RESULT"
-            else
-                LAST_ERROR=$(tail -20 "$TMP_STDERR" | tail -c 2000 | sed ':a;N;$!ba;s/\n/\\n/g')
-                [ -z "$LAST_ERROR" ] && LAST_ERROR="Unknown error or no error output"
-                SUDOERS_MISSING=$(check_sudoers)
-                json_response false "SMART script failed" "$LAST_ERROR" "$SUDOERS_MISSING"
-                log "[ERROR] SMART script failed: $LAST_ERROR"
-            fi
-            ;;
-        ""|"-a"|"-i")
-            # 기존 Finished 대기 루프 방식
-            if [ ! -x "${SMART_SCRIPT}" ]; then
-                json_response false "Smart script not found or not executable" ""
-                log "[ERROR] Smart script not found or not executable"
-                exit 0
-            fi
-    
-            TMP_RESULT="${RESULT_FILE}.tmp"
-            TMP_STDERR="${LOG_DIR}/last_smart_stderr.log"
-            rm -f "$TMP_RESULT" "$TMP_STDERR"
-    
-            if [ -n "$OPTION" ]; then
-                timeout 240 sudo "${SMART_SCRIPT}" "$OPTION" > "$TMP_RESULT" 2> "$TMP_STDERR" &
-            else
-                timeout 240 sudo "${SMART_SCRIPT}" > "$TMP_RESULT" 2> "$TMP_STDERR" &
-            fi
-            CMD_PID=$!
-    
-            i=0
-            while [ $i -lt 240 ]; do
-                if grep -q "Finished" "$TMP_RESULT" 2>/dev/null; then
-                    break
-                fi
-                if ! kill -0 $CMD_PID 2>/dev/null; then
-                    break
-                fi
-                sleep 1
-                i=$((i+1))
-            done
-    
-            if kill -0 $CMD_PID 2>/dev/null; then
-                kill $CMD_PID 2>/dev/null
-                wait $CMD_PID 2>/dev/null
-            fi
-    
-            if grep -q "Finished" "$TMP_RESULT" 2>/dev/null; then
-                mv "$TMP_RESULT" "${RESULT_FILE}"
-                chmod 644 "${RESULT_FILE}"
-                SMART_RESULT="$(cat "${RESULT_FILE}")"
-                json_response true "SMART scan completed" "$SMART_RESULT"
-            else
-                LAST_ERROR=$(tail -20 "$TMP_STDERR" | tail -c 2000 | sed ':a;N;$!ba;s/\n/\\n/g')
-                [ -z "$LAST_ERROR" ] && LAST_ERROR="Unknown error or no error output"
-                SUDOERS_MISSING=$(check_sudoers)
-                json_response false "SMART scan failed" "$LAST_ERROR" "$SUDOERS_MISSING"
-                log "[ERROR] SMART scan failed: $LAST_ERROR"
-            fi
-            ;;
+        ""|"-a"|"-i"|"-v"|"-h"|"-e") ;;  # OK
         *)
+            log "[WARN] Rejected invalid option: ${OPTION}"
             json_response false "Invalid option: ${OPTION}" ""
             exit 0
             ;;
-        esac
-        ;;
+    esac
+
+    if [ ! -f "${SMART_CLIENT}" ]; then
+        log "[ERROR] smart_client.py not found: ${SMART_CLIENT}"
+        json_response false "Smart client not found" ""
+        exit 0
+    fi
+
+    TMP_RESULT="${RESULT_FILE}.tmp"
+    rm -f "${TMP_RESULT}"
+
+    # helper 에 요청 → JSON 응답 수신
+    HELPER_RESPONSE="$(call_helper smart_scan "${OPTION}")"
+    CALL_STATUS=$?
+
+    if [ ${CALL_STATUS} -ne 0 ] || [ -z "${HELPER_RESPONSE}" ]; then
+        log "[ERROR] Helper communication failed (exit=${CALL_STATUS})"
+        json_response false "Helper communication failed" ""
+        exit 0
+    fi
+
+    # 응답 파싱
+    SUCCESS="$(echo "${HELPER_RESPONSE}" | python3 -c \
+        'import json,sys; d=json.load(sys.stdin); print("true" if d.get("success") else "false")' \
+        2>/dev/null)"
+    SMART_OUTPUT="$(echo "${HELPER_RESPONSE}" | extract_field output 2>/dev/null)"
+    HELPER_ERROR="$(echo "${HELPER_RESPONSE}"  | extract_field error  2>/dev/null)"
+
+    if [ "${SUCCESS}" = "true" ] && [ -n "${SMART_OUTPUT}" ]; then
+        echo "${SMART_OUTPUT}" > "${TMP_RESULT}"
+        mv "${TMP_RESULT}" "${RESULT_FILE}"
+        chmod 644 "${RESULT_FILE}"
+        log "[INFO] SMART scan completed successfully"
+        json_response true "SMART scan completed" "${SMART_OUTPUT}"
+    else
+        ERROR_MSG="${HELPER_ERROR:-Unknown error}"
+        log "[ERROR] SMART scan failed: ${ERROR_MSG}"
+        json_response false "SMART scan failed" "${ERROR_MSG}"
+    fi
+    ;;
+
 *)
     log "[ERROR] Invalid action: ${ACTION}"
     json_response false "Invalid action: ${ACTION}" ""

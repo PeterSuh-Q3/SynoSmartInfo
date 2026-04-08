@@ -1,20 +1,78 @@
 #!/bin/bash
+#
+# SynoSmartInfo start-stop-status
+#
+# DSM 은 이 스크립트를 root 권한으로 실행한다.
+# smart_helper 는 root 데몬으로 기동되어야 하므로 여기서 직접 실행한다.
+#
 
-case $1 in
-    start)
-        # 패키지 시작 - 별도 데몬이 필요 없으므로 성공 반환
+PKG_NAME="Synosmartinfo"
+PKG_ROOT="/var/packages/${PKG_NAME}"
+HELPER="${PKG_ROOT}/target/bin/smart_helper"
+PID_FILE="/var/run/synosmartinfo/helper.pid"
+SOCKET_DIR="/var/run/synosmartinfo"
+LOG_FILE="${PKG_ROOT}/var/start-stop.log"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "${LOG_FILE}" 2>/dev/null
+}
+
+helper_running() {
+    [ -f "${PID_FILE}" ] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null
+}
+
+case "$1" in
+start)
+    if helper_running; then
+        log "smart_helper already running (pid=$(cat "${PID_FILE}"))"
         exit 0
-        ;;
-    stop)
-        # 패키지 중지 - 별도 데몬이 없으므로 성공 반환
-        exit 0
-        ;;
-    status)
-        # 패키지 상태 확인 - API 파일 존재 여부 확인
-        if [ -f "/var/packages/Synosmartinfo/target/ui/api.cgi" ]; then
-            exit 0  # 실행 중
-        else
-            exit 1  # 중지됨
-        fi
-        ;;
+    fi
+
+    if [ ! -f "${HELPER}" ]; then
+        log "ERROR: smart_helper not found: ${HELPER}"
+        exit 1
+    fi
+
+    # 소켓 디렉터리를 root:synosmartinfo 소유로 생성
+    mkdir -p "${SOCKET_DIR}"
+    chmod 750 "${SOCKET_DIR}"
+    if getent group synosmartinfo >/dev/null 2>&1; then
+        chown root:synosmartinfo "${SOCKET_DIR}"
+    fi
+
+    python3 "${HELPER}" >> "${LOG_FILE}" 2>&1 &
+    BGPID=$!
+    log "Started smart_helper (pid=${BGPID})"
+    # PID 파일은 helper 자신이 기록하지만 기동 실패 감지를 위해 짧게 대기
+    sleep 0.5
+    if ! kill -0 "${BGPID}" 2>/dev/null; then
+        log "ERROR: smart_helper exited immediately"
+        exit 1
+    fi
+    exit 0
+    ;;
+
+stop)
+    if helper_running; then
+        PID="$(cat "${PID_FILE}")"
+        kill -TERM "${PID}" 2>/dev/null
+        # 최대 5초 대기 후 강제 종료
+        for i in $(seq 1 5); do
+            kill -0 "${PID}" 2>/dev/null || break
+            sleep 1
+        done
+        kill -0 "${PID}" 2>/dev/null && kill -KILL "${PID}" 2>/dev/null
+        log "Stopped smart_helper (pid=${PID})"
+    fi
+    rm -f "${PID_FILE}" "/var/run/synosmartinfo/helper.sock"
+    exit 0
+    ;;
+
+status)
+    if helper_running; then
+        exit 0  # running
+    else
+        exit 1  # stopped
+    fi
+    ;;
 esac

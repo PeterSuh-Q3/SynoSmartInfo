@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""
+SynoSmartInfo Privileged Helper Daemon
+=======================================
+Runs as root. Listens on a Unix domain socket.
+Accepts only whitelisted actions with validated parameters.
+Non-root processes (api.cgi) communicate via socket — no sudo required.
+
+Socket : /var/run/synosmartinfo/helper.sock  (mode 0660, group synosmartinfo)
+PID    : /var/run/synosmartinfo/helper.pid
+Log    : /var/packages/Synosmartinfo/var/helper.log
+"""
+
+import grp
+import json
+import logging
+import os
+import signal
+import socket
+import subprocess
+import sys
+import threading
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+SOCKET_DIR   = "/var/run/synosmartinfo"
+SOCKET_PATH  = f"{SOCKET_DIR}/helper.sock"
+PID_FILE     = f"{SOCKET_DIR}/helper.pid"
+SMART_SCRIPT = "/var/packages/Synosmartinfo/target/bin/syno_smart_info.sh"
+LOG_DIR      = "/var/packages/Synosmartinfo/var"
+LOG_FILE     = f"{LOG_DIR}/helper.log"
+
+# ---------------------------------------------------------------------------
+# Whitelist — ONLY these values may reach subprocess.run()
+# ---------------------------------------------------------------------------
+ALLOWED_ACTIONS = frozenset({"smart_scan"})
+ALLOWED_OPTIONS = frozenset({"", "-a", "-i", "-v", "-h", "-e"})
+
+# Minimal, controlled environment for child processes.
+# /usr/local/bin is included because DSM 7 installs python3 there
+# (e.g. via SynoCli or the official Python 3 package from Package Center).
+SAFE_ENV = {
+    "PATH": "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/syno/bin:/usr/syno/sbin",
+    "HOME": "/root",
+    "LANG": "en_US.UTF-8",
+}
+
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+def setup_logging() -> None:
+    os.makedirs(LOG_DIR, mode=0o750, exist_ok=True)
+    logging.basicConfig(
+        filename=LOG_FILE,
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Request validation
+# ---------------------------------------------------------------------------
+def validate_request(data: object) -> "tuple[bool, str]":
+    if not isinstance(data, dict):
+        return False, "Request must be a JSON object"
+
+    action = data.get("action", "")
+    if action not in ALLOWED_ACTIONS:
+        return False, f"Unknown action: {action!r}"
+
+    if action == "smart_scan":
+        option = data.get("option", "")
+        if option not in ALLOWED_OPTIONS:
+            return False, f"Invalid option: {option!r}"
+
+    return True, ""
+
+
+# ---------------------------------------------------------------------------
+# Privileged execution
+# ---------------------------------------------------------------------------
+def handle_smart_scan(option: str) -> dict:
+    if not os.path.isfile(SMART_SCRIPT):
+        logging.error("SMART script not found: %s", SMART_SCRIPT)
+        return {"success": False, "output": "", "error": "SMART script not found"}
+
+    if not os.access(SMART_SCRIPT, os.X_OK):
+        logging.error("SMART script not executable: %s", SMART_SCRIPT)
+        return {"success": False, "output": "", "error": "SMART script not executable"}
+
+    # Quick options finish in seconds; full scan may take up to 240 s
+    timeout = 30 if option in ("-v", "-h") else 240
+
+    # Build command — only the script path and one pre-validated option flag
+    cmd = [SMART_SCRIPT]
+    if option:
+        cmd.append(option)  # option is guaranteed to be in ALLOWED_OPTIONS
+
+    logging.info("Executing: %s (timeout=%ds)", " ".join(cmd), timeout)
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=timeout,
+            env=SAFE_ENV,
+        )
+        return {
+            "success": True,
+            "output": proc.stdout,
+            "returncode": proc.returncode,
+            "error": proc.stderr[-2000:] if proc.stderr else "",
+        }
+    except subprocess.TimeoutExpired:
+        logging.warning("smart_scan timed out (option=%r)", option)
+        return {"success": False, "output": "", "error": "Scan timed out"}
+    except Exception as exc:
+        logging.error("smart_scan execution error: %s", exc)
+        return {"success": False, "output": "", "error": "Execution failed"}
+
+
+# ---------------------------------------------------------------------------
+# Per-client handler (runs in its own thread)
+# ---------------------------------------------------------------------------
+def handle_client(conn: socket.socket) -> None:
+    try:
+        conn.settimeout(10)
+
+        # Read newline-terminated JSON (max 64 KB)
+        raw = b""
+        while True:
+            chunk = conn.recv(4096)
+            if not chunk:
+                break
+            raw += chunk
+            if len(raw) > 65536:
+                conn.sendall(
+                    json.dumps({"success": False, "error": "Request too large"}).encode()
+                    + b"\n"
+                )
+                return
+            if raw.endswith(b"\n"):
+                break
+
+        try:
+            request = json.loads(raw.decode())
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            conn.sendall(
+                json.dumps({"success": False, "error": "Invalid JSON"}).encode() + b"\n"
+            )
+            return
+
+        ok, msg = validate_request(request)
+        if not ok:
+            logging.warning("Rejected request: %s", msg)
+            conn.sendall(
+                json.dumps({"success": False, "error": msg}).encode() + b"\n"
+            )
+            return
+
+        action = request["action"]
+        option = request.get("option", "")
+        logging.info("Accepted: action=%s option=%r", action, option)
+
+        # Extend connection timeout for long-running scans
+        conn.settimeout(260)
+
+        if action == "smart_scan":
+            result = handle_smart_scan(option)
+
+        conn.sendall(json.dumps(result).encode() + b"\n")
+
+    except Exception as exc:
+        logging.error("Client handler error: %s", exc)
+        try:
+            conn.sendall(
+                json.dumps({"success": False, "error": "Internal error"}).encode() + b"\n"
+            )
+        except Exception:
+            pass
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Server loop
+# ---------------------------------------------------------------------------
+def run_server() -> None:
+    os.makedirs(SOCKET_DIR, mode=0o750, exist_ok=True)
+
+    # Remove stale socket from a previous (crashed) run
+    if os.path.exists(SOCKET_PATH):
+        os.unlink(SOCKET_PATH)
+
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        server.bind(SOCKET_PATH)
+    except OSError as exc:
+        logging.error("Cannot bind socket %s: %s", SOCKET_PATH, exc)
+        sys.exit(1)
+
+    # Socket is readable by root + synosmartinfo group only
+    os.chmod(SOCKET_PATH, 0o660)
+    try:
+        gid = grp.getgrnam("synosmartinfo").gr_gid
+        os.chown(SOCKET_PATH, 0, gid)
+    except (KeyError, OSError):
+        # Group might not exist in edge cases; log but continue
+        logging.warning("Could not set group ownership on socket")
+
+    server.listen(5)
+    logging.info("smart_helper started (pid=%d, socket=%s)", os.getpid(), SOCKET_PATH)
+
+    def _shutdown(signum: int, _frame: object) -> None:
+        logging.info("Shutting down on signal %d", signum)
+        server.close()
+        for path in (SOCKET_PATH, PID_FILE):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
+
+    while True:
+        try:
+            conn, _ = server.accept()
+            t = threading.Thread(target=handle_client, args=(conn,), daemon=True)
+            t.start()
+        except OSError:
+            break
+        except Exception as exc:
+            logging.error("Accept error: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    if os.geteuid() != 0:
+        print("ERROR: smart_helper must run as root", file=sys.stderr)
+        sys.exit(1)
+
+    setup_logging()
+
+    # Write PID file before entering server loop
+    os.makedirs(SOCKET_DIR, mode=0o750, exist_ok=True)
+    with open(PID_FILE, "w") as f:
+        f.write(str(os.getpid()) + "\n")
+
+    run_server()
