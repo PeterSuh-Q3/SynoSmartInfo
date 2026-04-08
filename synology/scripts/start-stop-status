@@ -1,20 +1,57 @@
 #!/bin/bash
 
-case $1 in
-    start)
-        # 패키지 시작 - 별도 데몬이 필요 없으므로 성공 반환
-        exit 0
-        ;;
-    stop)
-        # 패키지 중지 - 별도 데몬이 없으므로 성공 반환
-        exit 0
-        ;;
-    status)
-        # 패키지 상태 확인 - API 파일 존재 여부 확인
-        if [ -f "/var/packages/Synosmartinfo/target/ui/api.cgi" ]; then
-            exit 0  # 실행 중
-        else
-            exit 1  # 중지됨
-        fi
-        ;;
+# SynoSmartInfo start-stop-status (Helper 제거 버전)
+# api-1.cgi에서 직접 sudo syno_smart_info.sh 호출 → 별도 daemon 불필요
+
+PKG_NAME="Synosmartinfo"
+PKG_ROOT="/var/packages/$PKG_NAME"
+VAR_DIR="$PKG_ROOT/var"
+
+log_message() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$VAR_DIR/start-stop.log" 2>/dev/null || \
+  echo "[$(date)] $1"
+}
+
+case "$1" in
+  start)
+    log_message "Starting SynoSmartInfo (direct sudo mode)"
+    
+    # api-1.cgi는 DSM webman에서 자동 관리
+    # 별도 daemon 없음 → sudoers만으로 동작
+    
+    # VAR 디렉터리/로그 정리
+    mkdir -p "$VAR_DIR" 2>/dev/null || true
+    touch "$VAR_DIR/start-stop.log"
+    chmod 644 "$VAR_DIR/start-stop.log"
+    
+    log_message "SynoSmartInfo ready (sudo syno_smart_info.sh direct call)"
+    exit 0
+    ;;
+
+  stop)
+    log_message "Stopping SynoSmartInfo (no daemon to stop)"
+    
+    # helper 없음 → 정리할 프로세스 없음
+    # VAR 디렉터리만 정리
+    rm -f "$VAR_DIR/helper."* 2>/dev/null || true
+    
+    log_message "SynoSmartInfo stop completed (direct sudo mode)"
+    exit 0
+    ;;
+
+  status)
+    # 별도 프로세스 없음 → 항상 "run" (sudoers만 있으면 사용 가능)
+    if [ -f "/etc/sudoers.d/$PKG_NAME" ]; then
+      echo "run"
+      exit 0
+    else
+      echo "stop"
+      exit 1
+    fi
+    ;;
+
+  *)
+    echo "Usage: $0 {start|stop|status}"
+    exit 1
+    ;;
 esac
