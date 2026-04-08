@@ -1,7 +1,0 @@
-{
-    "defaults": {
-        "run-as": "synosmartinfo"
-    },
-    "username": "synosmartinfo",
-    "groupname": "synosmartinfo"
-}

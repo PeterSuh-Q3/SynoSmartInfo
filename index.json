@@ -1,0 +1,13 @@
+[
+  {
+    "package": "package_name",
+    "version": "1.0.0-001",
+    "display_name": "My Package",
+    "description": "Short description of the package.",
+    "publisher": "Your Name",
+    "dsm_min_ver": "6.0-7321",
+    "arch": ["noarch"],
+    "thumbnail": "https://your-repo-url.com",
+    "link": "https://your-repo-url.com"
+  }
+]
