@@ -104,24 +104,24 @@ jobs:
           done
           ls -l ./dist
 
-      - name: Create noarch package (remove x86_64 duplicate)
-        if: steps.cache_dist.outputs.cache-hit != 'true'
-        run: |
-          ls -l ./dist
-          # x86_64 패키지 목록 백업
-          mv ./dist/Synosmartinfo-x86_64-*.spk ./dist/x86_64_backup/ 2>/dev/null || true
-          mkdir -p ./dist/x86_64_backup
-          
-          # noarch 변환
-          for f in ./dist/x86_64_backup/Synosmartinfo-x86_64-*.spk; do
-            noarch="${f/x86_64_backup\/Synosmartinfo-x86_64/noarch}"
-            tmpdir=$(mktemp -d)
-            tar -xf "$f" -C "$tmpdir"
-            sed -i 's/arch="x86_64"/arch="noarch"/' "$tmpdir/INFO"
-            tar -cf "$noarch" -C "$tmpdir" $(ls "$tmpdir")
-            rm -rf "$tmpdir"
-          done
-          ls -l ./dist
+      #- name: Create noarch package (remove x86_64 duplicate)
+      #  if: steps.cache_dist.outputs.cache-hit != 'true'
+      #  run: |
+      #    ls -l ./dist
+      #    # x86_64 패키지 목록 백업
+      #    mv ./dist/Synosmartinfo-x86_64-*.spk ./dist/x86_64_backup/ 2>/dev/null || true
+      #    mkdir -p ./dist/x86_64_backup
+      #    
+      #    # noarch 변환
+      #    for f in ./dist/x86_64_backup/Synosmartinfo-x86_64-*.spk; do
+      #      noarch="${f/x86_64_backup\/Synosmartinfo-x86_64/noarch}"
+      #      tmpdir=$(mktemp -d)
+      #      tar -xf "$f" -C "$tmpdir"
+      #      sed -i 's/arch="x86_64"/arch="noarch"/' "$tmpdir/INFO"
+      #      tar -cf "$noarch" -C "$tmpdir" $(ls "$tmpdir")
+      #      rm -rf "$tmpdir"
+      #    done
+      #    ls -l ./dist
     
       - name: Upload Package
         uses: actions/upload-artifact@v4
