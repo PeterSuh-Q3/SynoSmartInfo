@@ -1,74 +1,20 @@
 #!/bin/bash
-#
-# SynoSmartInfo start-stop-status
-#
-# conf/privilege 에 "run-as": "synosmartinfo" 로 선언되어 있으므로
-# 이 스크립트는 synosmartinfo 계정으로 실행된다.
-# smart_helper 도 synosmartinfo 로 실행되며, SMART 실행은
-# narrow sudoers 를 통해 syno_smart_info.sh 만 root 로 위임한다.
-#
 
-PKG_NAME="Synosmartinfo"
-PKG_ROOT="/var/packages/${PKG_NAME}"
-HELPER="${PKG_ROOT}/target/bin/smart_helper"
-VAR_DIR="${PKG_ROOT}/var"
-PID_FILE="${VAR_DIR}/helper.pid"
-LOG_FILE="${VAR_DIR}/start-stop.log"
-
-log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "${LOG_FILE}" 2>/dev/null
-}
-
-helper_running() {
-    [ -f "${PID_FILE}" ] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null
-}
-
-case "$1" in
-start)
-    if helper_running; then
-        log "smart_helper already running (pid=$(cat "${PID_FILE}"))"
+case $1 in
+    start)
+        # 패키지 시작 - 별도 데몬이 필요 없으므로 성공 반환
         exit 0
-    fi
-
-    if [ ! -f "${HELPER}" ]; then
-        log "ERROR: smart_helper not found: ${HELPER}"
-        exit 1
-    fi
-
-    # VAR_DIR 는 DSM 이 직접 생성·관리하므로 별도 mkdir 불필요
-    python3 "${HELPER}" >> "${LOG_FILE}" 2>&1 &
-    BGPID=$!
-    log "Started smart_helper (pid=${BGPID})"
-    # PID 파일은 helper 자신이 기록하지만 기동 실패 감지를 위해 짧게 대기
-    sleep 0.5
-    if ! kill -0 "${BGPID}" 2>/dev/null; then
-        log "ERROR: smart_helper exited immediately"
-        exit 1
-    fi
-    exit 0
-    ;;
-
-stop)
-    if helper_running; then
-        PID="$(cat "${PID_FILE}")"
-        kill -TERM "${PID}" 2>/dev/null
-        # 최대 5초 대기 후 강제 종료
-        for i in $(seq 1 5); do
-            kill -0 "${PID}" 2>/dev/null || break
-            sleep 1
-        done
-        kill -0 "${PID}" 2>/dev/null && kill -KILL "${PID}" 2>/dev/null
-        log "Stopped smart_helper (pid=${PID})"
-    fi
-    rm -f "${PID_FILE}" "${VAR_DIR}/helper.sock"
-    exit 0
-    ;;
-
-status)
-    if helper_running; then
-        exit 0  # running
-    else
-        exit 1  # stopped
-    fi
-    ;;
+        ;;
+    stop)
+        # 패키지 중지 - 별도 데몬이 없으므로 성공 반환
+        exit 0
+        ;;
+    status)
+        # 패키지 상태 확인 - API 파일 존재 여부 확인
+        if [ -f "/var/packages/Synosmartinfo/target/ui/api.cgi" ]; then
+            exit 0  # 실행 중
+        else
+            exit 1  # 중지됨
+        fi
+        ;;
 esac

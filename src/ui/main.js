@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ansi_up 인스턴스 생성
     const ansi_up = new AnsiUp();
 
-    // 시스템 정보 파싱 함수
+    // 시스템 정보 파싱 함수 (기존과 동일)
     function parseSystemInfo(data) {
         if (!data) return {};
         const info = {};
@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return info;
     }
 
-    // API 호출 함수
+    // API 호출 함수 (기존과 동일)
     function callAPI(action, params = {}) {
         const urlParams = new URLSearchParams();
         urlParams.append('action', action);
@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 시스템 정보 로드 함수
+    // 시스템 정보 로드 함수 (기존과 동일)
     function loadSystemInfo() {
         systemInfo.innerHTML = '<span style="color: #0066cc;">Loading system information...</span>';
 
@@ -68,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     }
 
-    // 상태 업데이트 함수
+    // 상태 업데이트 함수 (기존과 동일)
     function updateStatus(message, type = 'info') {
         status.textContent = message;
         status.className = 'status ' + type;
@@ -80,7 +80,31 @@ document.addEventListener('DOMContentLoaded', () => {
         optionSelect.disabled = !enabled;
     }
 
-    // RUN 버튼 이벤트 핸들러
+    function showSudoersGuide() {
+        return `
+            <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:6px; padding:16px; margin-top:12px; font-family:monospace;">
+                <strong style="color:#856404;">⚠️ 권한 설정이 필요합니다 / Permission Setup Required</strong><br><br>
+                <span style="color:#333;">
+                    /etc/sudoers.d/Synosmartinfo 파일이 존재하지 않습니다.<br>
+                    <em style="color:#666;">The /etc/sudoers.d/Synosmartinfo file does not exist.</em><br><br>
+                    SSH로 접속하여 아래 명령어를 순서대로 실행해주세요.<br>
+                    <em style="color:#666;">Please connect via SSH and run the following commands in order.</em>
+                </span><br><br>
+                <div style="background:#1e1e1e; color:#d4d4d4; padding:12px; border-radius:4px; line-height:1.8;">
+                    <span style="color:#569cd6;">sudo -i</span><br>
+                    <span style="color:#569cd6;">echo</span> <span style="color:#ce9178;">"synosmartinfo ALL=(ALL) NOPASSWD: ALL"</span> <span style="color:#d4d4d4;">&gt; /etc/sudoers.d/Synosmartinfo</span><br>
+                    <span style="color:#569cd6;">chmod</span> <span style="color:#b5cea8;">0440</span> /etc/sudoers.d/Synosmartinfo
+                </div>
+                <br>
+                <span style="color:#856404;">
+                    설정 완료 후 다시 RUN 버튼을 눌러주세요.<br>
+                    <em>After setup is complete, please click the RUN button again.</em>
+                </span>
+            </div>
+        `;
+    }
+    
+    // RUN 버튼 이벤트 핸들러 수정: ANSI -> HTML 변환 후 출력
     runBtn.addEventListener('click', () => {
         const selectedOption = optionSelect.value;
 
@@ -102,7 +126,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 } else {
                     updateStatus('Failed: ' + response.message, 'error');
-                    output.textContent = 'Error: ' + (response.result || response.message);
+                    // sudoers 파일 미존재 여부 감지
+                    if (response.sudoers_missing === true) {
+                        output.innerHTML = 'Error: ' + response.message + showSudoersGuide();
+                    } else {
+                        output.textContent = 'Error: ' + response.message;
+                    }
                 }
             })
             .catch(error => {
@@ -118,3 +147,4 @@ document.addEventListener('DOMContentLoaded', () => {
     // 초기 시스템 정보 자동 로드
     loadSystemInfo();
 });
+//

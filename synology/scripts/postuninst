@@ -1,18 +1,8 @@
 #!/bin/bash
-#
-# SynoSmartInfo post-uninstallation script
-#
 
+# 심볼릭 링크 제거
 PKG_NAME=$(basename "$SYNOPKG_PKGDEST")
-
-# ── 1. Web UI 심볼릭 링크 제거 ───────────────────────────────────────
-rm -f "/usr/syno/synoman/webman/3rdparty/$PKG_NAME"
-
-# ── 2. 소켓 및 PID 파일 정리 ────────────────────────────────────────
-rm -f "/var/packages/${PKG_NAME}/var/helper.sock"
-rm -f "/var/packages/${PKG_NAME}/var/helper.pid"
-
-# ── 3. Sudoers 파일 제거 ─────────────────────────────────────────────
-rm -f "/etc/sudoers.d/${PKG_NAME}"
+rm -f /usr/syno/synoman/webman/3rdparty/$PKG_NAME
 
 exit 0
+
