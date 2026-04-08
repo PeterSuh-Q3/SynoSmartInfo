@@ -1,137 +1,128 @@
-name: Build n Release Synology Smart Info Package
+
+name: Build n Release Synology Smart Info Package (Cache-Controlled)
 on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      use_cache:
+        description: 'Use cache? (true/false)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+        - 'true'
+        - 'false'
 
 jobs:
-  # ── 태그 계산 전용 job (1회만 실행) ────────────────────────────
+  # ── 태그 계산 전용 job ────────────────────────────
   prepare:
     name: Prepare Release Tag
     runs-on: ubuntu-latest
     outputs:
       new_tag: ${{ steps.get_latest_tag.outputs.new_tag }}
     steps:
-      - name: Get latest release tag from PeterSuh-Q3/SynoSmartInfo
-        id: get_latest_tag
-        run: |
-          latest_tag=$(curl -s https://api.github.com/repos/PeterSuh-Q3/SynoSmartInfo/releases/latest | jq -r .tag_name)
-          echo "Latest tag: $latest_tag"
-          major=$(echo $latest_tag | cut -d. -f1 | tr -d 'v')
-          minor=$(echo $latest_tag | cut -d. -f2)
-          patch=$(echo $latest_tag | cut -d. -f3)
-          if [ "$patch" -lt 9 ]; then
-            patch=$((patch + 1))
-          else
-            patch=0
-            minor=$((minor + 1))
-          fi
-          new_tag="v${major}.${minor}.${patch}"
-          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+    - name: Get latest release tag from PeterSuh-Q3/SynoSmartInfo
+      id: get_latest_tag
+      run: |
+        latest_tag=$(curl -s https://api.github.com/repos/PeterSuh-Q3/SynoSmartInfo/releases/latest | jq -r .tag_name)
+        echo "Latest tag: $latest_tag"
+        major=$(echo $latest_tag | cut -d. -f1 | tr -d 'v')
+        minor=$(echo $latest_tag | cut -d. -f2)
+        patch=$(echo $latest_tag | cut -d. -f3)
+        if [ "$patch" -lt 9 ]; then
+          patch=$((patch + 1))
+        else
+          patch=0
+          minor=$((minor + 1))
+        fi
+        new_tag="v${major}.${minor}.${patch}"
+        echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
 
-  # ── 빌드 job (매트릭스별 실행) ─────────────────────────────────
+  # ── 빌드 job ─────────────────────────────────
   build-spk:
-    name: Build Package
+    name: Build Package ${{ github.event.inputs.use_cache || 'default' }}
     needs: prepare
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       max-parallel: 1
-      matrix:
-        arch: ['kvmx64']
-        dsm: ['7.3','7.2','7.1']
-
+    matrix:
+      arch: ['kvmx64']
+      dsm: ['7.3','7.2','7.1']
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      - name: Get latest syno_smart_info.sh
-        run: |
-          curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh \
-            -o ./src/bin/syno_smart_info.sh
+    - name: Get latest syno_smart_info.sh
+      run: |
+        curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh           -o ./src/bin/syno_smart_info.sh
 
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: docker-${{ runner.os }}-synology-package-builder-v1.3.0
-          restore-keys: |
-            docker-${{ runner.os }}-synology-package-builder-
+    - name: Cache Docker layers
+      uses: actions/cache@v4
+      with:
+        path: /tmp/.buildx-cache
+        key: docker-${{ runner.os }}-synology-package-builder-v1.3.0
+        restore-keys: |
+          docker-${{ runner.os }}-synology-package-builder-
 
-      - name: Pull & cache builder image
-        run: |
-          docker pull ghcr.io/tomgrv/synology-package-builder:v1.3.0 || true
+    - name: Pull & cache builder image
+      run: |
+        docker pull ghcr.io/tomgrv/synology-package-builder:v1.3.0 || true
 
-      - name: Cache dist packages
-        id: cache_dist
-        uses: actions/cache@v4
-        with:
-          path: ./dist
-          key: dist-${{ matrix.arch }}-${{ matrix.dsm }}-${{ hashFiles('src/**') }}
-          restore-keys: |
-            dist-${{ matrix.arch }}-${{ matrix.dsm }}-
+    - name: Cache dist packages
+      id: cache_dist
+      uses: actions/cache@v4
+      if: github.event.inputs.use_cache != 'false'  # 캐시 사용 시에만
+      with:
+        path: ./dist
+        key: dist-${{ matrix.arch }}-${{ matrix.dsm }}-${{ hashFiles('src/**') }}
+        restore-keys: |
+          dist-${{ matrix.arch }}-${{ matrix.dsm }}-
 
-      - name: Synology Package Builder Github Action
-        if: steps.cache_dist.outputs.cache-hit != 'true'
-        uses: tomgrv/synology-package-builder@v1.3.0
-        with:
-          dsm: ${{ matrix.dsm }}
-          arch: ${{ matrix.arch }}
-          output: ./dist
+    - name: Synology Package Builder Github Action
+      if: steps.cache_dist.outputs.cache-hit != 'true' || github.event.inputs.use_cache == 'false'
+      uses: tomgrv/synology-package-builder@v1.3.0
+      with:
+        dsm: ${{ matrix.dsm }}
+        arch: ${{ matrix.arch }}
+        output: ./dist
 
-      - name: Add dsmappname to INFO
-        if: steps.cache_dist.outputs.cache-hit != 'true'
-        run: |
-          for f in ./dist/*.spk; do
-            [[ "$f" == *_debug.spk ]] && continue
-            tmpdir=$(mktemp -d)
-            tar -xf "$f" -C "$tmpdir"
-            APPID=$(jq -r '.[] | keys[]' src/ui/config)
-            if ! grep -q "dsmappname" "$tmpdir/INFO"; then
-              sed -i "s/dsmuidir=\"ui\"/dsmuidir=\"ui\"\ndsmappname=\"$APPID\"/" "$tmpdir/INFO"
-            fi
-            tar -cf "$f" -C "$tmpdir" $(ls "$tmpdir")
-            rm -rf "$tmpdir"
-          done
+    - name: Add dsmappname to INFO
+      if: steps.cache_dist.outputs.cache-hit != 'true' || github.event.inputs.use_cache == 'false'
+      run: |
+        for f in ./dist/*.spk; do
+          [[ "$f" == *_debug.spk ]] && continue
+          tmpdir=$(mktemp -d)
+          tar -xf "$f" -C "$tmpdir"
+          APPID=$(jq -r '.[] | keys[]' src/ui/config)
+          if ! grep -q "dsmappname" "$tmpdir/INFO"; then
+            sed -i "s/dsmuidir=\"ui\"/dsmuidir=\"ui\"\ndsmappname=\"$APPID\"/" "$tmpdir/INFO"
+          fi
+          tar -cf "$f" -C "$tmpdir" $(ls "$tmpdir")
+          rm -rf "$tmpdir"
+        done
 
-      - name: Remove debug spk and rename package
-        if: steps.cache_dist.outputs.cache-hit != 'true'
-        run: |
-          ls -l ./dist
-          rm ./dist/*_debug.spk
-          for f in ./dist/*.spk; do
-            mv "$f" "${f%.spk}-${{ matrix.dsm }}.spk"
-          done
-          ls -l ./dist
+    - name: Remove debug spk and rename package
+      if: steps.cache_dist.outputs.cache-hit != 'true' || github.event.inputs.use_cache == 'false'
+      run: |
+        ls -l ./dist
+        rm ./dist/*_debug.spk 2>/dev/null || true
+        for f in ./dist/*.spk; do
+          mv "$f" "${f%.spk}-${{ matrix.dsm }}.spk"
+        done
+        ls -l ./dist
 
-      #- name: Create noarch package (remove x86_64 duplicate)
-      #  if: steps.cache_dist.outputs.cache-hit != 'true'
-      #  run: |
-      #    ls -l ./dist
-      #    # x86_64 패키지 목록 백업
-      #    mv ./dist/Synosmartinfo-x86_64-*.spk ./dist/x86_64_backup/ 2>/dev/null || true
-      #    mkdir -p ./dist/x86_64_backup
-      #    
-      #    # noarch 변환
-      #    for f in ./dist/x86_64_backup/Synosmartinfo-x86_64-*.spk; do
-      #      noarch="${f/x86_64_backup\/Synosmartinfo-x86_64/noarch}"
-      #      tmpdir=$(mktemp -d)
-      #      tar -xf "$f" -C "$tmpdir"
-      #      sed -i 's/arch="x86_64"/arch="noarch"/' "$tmpdir/INFO"
-      #      tar -cf "$noarch" -C "$tmpdir" $(ls "$tmpdir")
-      #      rm -rf "$tmpdir"
-      #    done
-      #    ls -l ./dist
-    
-      - name: Upload Package
-        uses: actions/upload-artifact@v4
-        with:
-          name: SynoSmartInfo-${{ matrix.dsm }}
-          path: ./dist/*.spk
+    - name: Upload Package
+      uses: actions/upload-artifact@v4
+      with:
+        name: SynoSmartInfo-${{ matrix.dsm }}-${{ github.event.inputs.use_cache || 'cached' }}
+        path: ./dist/*.spk
 
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.prepare.outputs.new_tag }}  # prepare job의 태그 재사용
-          files: |
-            ./dist/*.spk
+    - name: Release (only if cache applied)
+      if: github.event.inputs.use_cache == 'true' && github.ref_type == 'tag'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ needs.prepare.outputs.new_tag }}
+        files: |
+          ./dist/*.spk
