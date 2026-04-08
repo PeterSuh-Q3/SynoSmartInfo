@@ -42,36 +42,8 @@ chown root:$PKG_NAME "$VAR_DIR"
 log_message "VAR_DIR ready: $VAR_DIR"
 
 # ─────────────────────────────────────────────────────────────────────────
-# 2. 패키지 전용 그룹/사용자 생성 (idempotent)
+# 2. 패키지 전용 그룹/사용자 생성 (idempotent), 생략
 # ─────────────────────────────────────────────────────────────────────────
-
-log_message "Checking/creating group: synosmartinfo"
-if ! getent group synosmartinfo >/dev/null 2>&1; then
-  if synogroup --add synosmartinfo 2>/dev/null; then
-    log_message "Created group via synogroup: synosmartinfo"
-  elif addgroup -S synosmartinfo 2>/dev/null; then
-    log_message "Created group via addgroup: synosmartinfo"
-  elif groupadd -r synosmartinfo 2>/dev/null; then
-    log_message "Created group via groupadd: synosmartinfo"
-  else
-    log_message "WARNING: Failed to create group synosmartinfo (may already exist)"
-  fi
-else
-  log_message "Group synosmartinfo already exists"
-fi
-
-log_message "Checking/creating user: synosmartinfo"
-if ! getent passwd synosmartinfo >/dev/null 2>&1; then
-  if adduser -S -D -H -G synosmartinfo -s /bin/false synosmartinfo 2>/dev/null; then
-    log_message "Created user via adduser: synosmartinfo"
-  elif useradd -r -M -s /sbin/nologin -g synosmartinfo synosmartinfo 2>/dev/null; then
-    log_message "Created user via useradd: synosmartinfo"
-  else
-    log_message "WARNING: Failed to create user synosmartinfo (may already exist)"
-  fi
-else
-  log_message "User synosmartinfo already exists"
-fi
 
 # ─────────────────────────────────────────────────────────────────────────
 # 3. Narrow sudoers 설정 (Narrow Privilege)
