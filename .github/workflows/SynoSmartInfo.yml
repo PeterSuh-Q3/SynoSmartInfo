@@ -1,29 +1,24 @@
 
 name: Build n Release Synology Smart Info Package (Cache-Controlled)
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       use_cache:
-        description: 'Use cache? (true/false)'
+        description: 'Use cache?'
         required: true
         default: 'true'
         type: choice
-        options:
-        - 'true'
-        - 'false'
+        options: ['true', 'false']
 
 jobs:
-  # ── 태그 계산 전용 job ────────────────────────────
-  prepare:
-    name: Prepare Release Tag
-    runs-on: ubuntu-latest
-    outputs:
-      new_tag: ${{ steps.get_latest_tag.outputs.new_tag }}
-    steps:
-    - name: Get latest release tag from PeterSuh-Q3/SynoSmartInfo
-      id: get_latest_tag
+  build-spk:
+  strategy:
+    matrix:
+      arch: ['kvmx64']
+      dsm: ['7.3','7.2','7.1']
+  steps:
+  - name: Get latest release tag from PeterSuh-Q3/SynoSmartInfo
+       id: get_latest_tag
       run: |
         latest_tag=$(curl -s https://api.github.com/repos/PeterSuh-Q3/SynoSmartInfo/releases/latest | jq -r .tag_name)
         echo "Latest tag: $latest_tag"
