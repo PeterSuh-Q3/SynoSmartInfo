@@ -23,7 +23,7 @@ ll /etc/sudoers.d/Synosmartinfo
 
 ```
 sudo -i
-echo "synosmartinfo ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/Synosmartinfo
+echo "synosmartinfo ALL=NOPASSWD: /var/packages/Synosmartinfo/target/bin/syno_smart_info.sh" > /etc/sudoers.d/Synosmartinfo
 chmod 0440 /etc/sudoers.d/Synosmartinfo
 ```
 
