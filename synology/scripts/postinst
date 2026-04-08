@@ -1,110 +1,185 @@
 #!/bin/bash
-#
-# SynoSmartInfo post-installation script
-# DSM 은 이 스크립트를 root 권한으로 실행한다.
-#
 
-PKG_NAME=$(basename "$SYNOPKG_PKGDEST")
-TARGET_DIR="/var/packages/$PKG_NAME/target"
-UI_DIR="$TARGET_DIR/ui"
-BIN_DIR="$TARGET_DIR/bin"
-VAR_DIR="/var/packages/$PKG_NAME/var"
-SUDOERS_FILE="/etc/sudoers.d/${PKG_NAME}"
+# SynoSmartInfo post-installation script (DSM 7 호환)
+# DSM은 이 스크립트를 root 권한으로 실행한다.
 
+set -e  # 첫 번째 오류에서 중단
+
+# ─────────────────────────────────────────────────────────────────────────
+# 상수 및 환경 변수 설정
+# ─────────────────────────────────────────────────────────────────────────
+
+readonly PKG_NAME="${SYNOPKG_PKGNAME:-Synosmartinfo}"
+readonly TARGET_DIR="/var/packages/$PKG_NAME/target"
+readonly UI_DIR="$TARGET_DIR/ui"
+readonly BIN_DIR="$TARGET_DIR/bin"
+readonly VAR_DIR="/var/packages/$PKG_NAME/var"
+readonly SUDOERS_FILE="/etc/sudoers.d/$PKG_NAME"
+readonly RESULT_DIR="/usr/syno/synoman/webman/3rdparty/$PKG_NAME/result"
+readonly LOG_FILE="$VAR_DIR/install.log"
+
+# 로그 함수 (디렉터리 생성 후 기록)
 log_message() {
-    mkdir -p "$VAR_DIR" 2>/dev/null
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$VAR_DIR/install.log" 2>/dev/null || echo "$1"
+  local msg="$1"
+  local level="${2:-INFO}"
+  mkdir -p "$VAR_DIR" 2>/dev/null || true
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $msg" >> "$LOG_FILE" 2>/dev/null || \
+  echo "[$level] $msg" >&2
 }
 
-log_message "Post-installation starting for: $PKG_NAME"
+log_message "=== Post-installation STARTING for: $PKG_NAME ==="
 
-# ── 1. VAR 디렉터리 생성 ───────────────────────────────────────────────
-if mkdir -p "$VAR_DIR"; then
-    log_message "VAR_DIR ready: $VAR_DIR"
-else
-    log_message "ERROR: Failed to create VAR_DIR: $VAR_DIR"
-    exit 1
+# ─────────────────────────────────────────────────────────────────────────
+# 1. VAR 디렉터리 생성 (로그 저장용)
+# ─────────────────────────────────────────────────────────────────────────
+
+if ! mkdir -p "$VAR_DIR" 2>/dev/null; then
+  echo "ERROR: Cannot create $VAR_DIR" >&2
+  exit 1
 fi
+chmod 775 "$VAR_DIR"
+chown root:$PKG_NAME "$VAR_DIR"
+log_message "VAR_DIR ready: $VAR_DIR"
 
-# ── 2. 패키지 전용 그룹/사용자 생성 ──────────────────────────────────
-# conf/privilege 가 선언돼 있으면 DSM 이 자동 생성하지만,
-# 없는 경우를 대비해 직접 생성도 시도한다.
+# ─────────────────────────────────────────────────────────────────────────
+# 2. 패키지 전용 그룹/사용자 생성 (idempotent)
+# ─────────────────────────────────────────────────────────────────────────
+
+log_message "Checking/creating group: synosmartinfo"
 if ! getent group synosmartinfo >/dev/null 2>&1; then
-    synogroup --add synosmartinfo 2>/dev/null || \
-        addgroup synosmartinfo 2>/dev/null || \
-        groupadd synosmartinfo 2>/dev/null || true
-    log_message "Created group: synosmartinfo"
+  if synogroup --add synosmartinfo 2>/dev/null; then
+    log_message "Created group via synogroup: synosmartinfo"
+  elif addgroup -S synosmartinfo 2>/dev/null; then
+    log_message "Created group via addgroup: synosmartinfo"
+  elif groupadd -r synosmartinfo 2>/dev/null; then
+    log_message "Created group via groupadd: synosmartinfo"
+  else
+    log_message "WARNING: Failed to create group synosmartinfo (may already exist)"
+  fi
+else
+  log_message "Group synosmartinfo already exists"
 fi
 
+log_message "Checking/creating user: synosmartinfo"
 if ! getent passwd synosmartinfo >/dev/null 2>&1; then
-    adduser -S -D -H -G synosmartinfo -s /bin/false synosmartinfo 2>/dev/null || \
-        useradd -r -M -s /sbin/nologin -g synosmartinfo synosmartinfo 2>/dev/null || true
-    log_message "Created user: synosmartinfo"
+  if adduser -S -D -H -G synosmartinfo -s /bin/false synosmartinfo 2>/dev/null; then
+    log_message "Created user via adduser: synosmartinfo"
+  elif useradd -r -M -s /sbin/nologin -g synosmartinfo synosmartinfo 2>/dev/null; then
+    log_message "Created user via useradd: synosmartinfo"
+  else
+    log_message "WARNING: Failed to create user synosmartinfo (may already exist)"
+  fi
+else
+  log_message "User synosmartinfo already exists"
 fi
 
-# ── 3. Narrow sudoers 설정 ────────────────────────────────────────────
-# synosmartinfo 계정에 SMART 조회에 필요한 특정 바이너리만 허용한다.
-# NOPASSWD: ALL 은 절대 사용하지 않는다.
-#
-# 허용 대상:
-#   - smartctl / smartctl7 : SMART 데이터 직접 하드웨어 접근 (CAP_SYS_RAWIO 필요)
-#   - synodisk             : Synology 디스크 슬롯 위치 조회
-#   - synonvme             : M.2 NVMe 슬롯 정보 조회
-#   - syno_slot_mapping    : 확장 유닛 슬롯 매핑 조회
-#
-# 인자(argument) 없이 절대경로만 지정하면 임의 인자 주입이 가능하므로,
-# 아래에서는 절대경로 지정으로 실행 바이너리 자체를 제한하는 것에 집중한다.
-# helper 내부에서 인자 화이트리스트 검증을 추가로 수행한다.
+# ─────────────────────────────────────────────────────────────────────────
+# 3. Narrow sudoers 설정 (Narrow Privilege)
+# ─────────────────────────────────────────────────────────────────────────
 
-# smart_helper 가 실행할 SMART 스크립트 경로
+log_message "Configuring narrow sudoers: $SUDOERS_FILE"
+
+# SMART 스크립트 경로 (실제 존재하는지 확인)
 SMART_SCRIPT="$BIN_DIR/syno_smart_info.sh"
+if [ ! -f "$SMART_SCRIPT" ]; then
+  log_message "WARNING: SMART script not found: $SMART_SCRIPT"
+  SMART_SCRIPT=""  # 빈 값으로 두고 sudoers에서 제외
+fi
 
-# 허용할 명령 목록 구성 (존재하는 것만)
-ALLOWED_CMDS="$SMART_SCRIPT"
+# sudoers.d 디렉터리 확인
+if [ ! -d "/etc/sudoers.d" ]; then
+  log_message "ERROR: /etc/sudoers.d directory missing"
+  exit 1
+fi
 
-cat > "$SUDOERS_FILE" << EOF
-# SynoSmartInfo - Narrow sudoers
-# 생성일: $(date '+%Y-%m-%d %H:%M:%S')
-# 목적: SMART/디스크 상태 조회 스크립트만 root 실행 허용
-# NOPASSWD: ALL 은 사용하지 않음
+# 기존 파일 백업
+if [ -f "$SUDOERS_FILE" ]; then
+  mv "$SUDOERS_FILE" "${SUDOERS_FILE}.backup.$(date +%s)" 2>/dev/null || true
+  log_message "Backed up existing sudoers file"
+fi
+
+# sudoers 내용 생성 (tmp 파일로 안전하게)
+cat > "${SUDOERS_FILE}.tmp" << EOF
 #
-# 허용 범위:
-#   - syno_smart_info.sh : SMART 데이터 수집 전용 스크립트
-#     (스크립트 내부에서 smartctl, synodisk, synonvme 등 호출)
-#   - 임의 명령 실행 불가 (절대경로 고정, 화이트리스트 인자만 허용)
+# SynoSmartInfo - Narrow sudoers (auto-generated)
+# Generated: $(date '+%Y-%m-%d %H:%M:%S')
+# Purpose: Allow SMART script execution only (NO NOPASSWD: ALL)
+#
 
-synosmartinfo ALL=(root) NOPASSWD: $SMART_SCRIPT
+# Allow synosmartinfo to run specific SMART script as root
+$( [ -n "$SMART_SCRIPT" ] && echo "synosmartinfo ALL=(root) NOPASSWD: $SMART_SCRIPT" || echo "# SMART_SCRIPT not found - no sudoers entry" )
 EOF
-chmod 0440 "$SUDOERS_FILE"
-log_message "Sudoers configured (narrow): $SMART_SCRIPT"
 
-# ── 4. Web UI 심볼릭 링크 생성 ────────────────────────────────────────
-if ln -sf "/var/packages/$PKG_NAME/target/ui" \
-         "/usr/syno/synoman/webman/3rdparty/$PKG_NAME" 2>/dev/null; then
-    log_message "Created web interface symlink"
+if [ -f "${SUDOERS_FILE}.tmp" ]; then
+  mv "${SUDOERS_FILE}.tmp" "$SUDOERS_FILE"
+  chmod 0440 "$SUDOERS_FILE"
+  chown root:root "$SUDOERS_FILE"
+  log_message "Narrow sudoers created successfully: $SUDOERS_FILE"
+  
+  # sudoers syntax 검증
+  if visudo -cf "$SUDOERS_FILE" >/dev/null 2>&1; then
+    log_message "Sudoers syntax verified OK"
+  else
+    log_message "WARNING: Sudoers syntax check failed"
+  fi
 else
-    log_message "WARNING: Failed to create web interface symlink"
+  log_message "ERROR: Failed to create sudoers file"
+  exit 1
 fi
 
-# ── 5. 결과 파일 디렉터리 (웹에서 정적 파일 제공용) ──────────────────
-RESULT_DIR="/usr/syno/synoman/webman/3rdparty/$PKG_NAME/result"
-if mkdir -p "$RESULT_DIR"; then
-    chmod 755 "$RESULT_DIR"
-    log_message "Result directory ready: $RESULT_DIR"
+# ─────────────────────────────────────────────────────────────────────────
+# 4. Web UI 심볼릭 링크 생성
+# ─────────────────────────────────────────────────────────────────────────
+
+WEBMAN_DIR="/usr/syno/synoman/webman/3rdparty/$PKG_NAME"
+if [ -d "$UI_DIR" ] && ln -sf "$UI_DIR" "$WEBMAN_DIR" 2>/dev/null; then
+  log_message "Created web UI symlink: $WEBMAN_DIR -> $UI_DIR"
 else
-    log_message "WARNING: Failed to create result directory: $RESULT_DIR"
+  log_message "WARNING: Failed to create web UI symlink (may already exist)"
 fi
 
-# ── 6. 실행 권한 설정 ─────────────────────────────────────────────────
-chmod +x "$BIN_DIR/syno_smart_info.sh"  2>/dev/null || true
-chmod +x "$BIN_DIR/smart_helper"        2>/dev/null || true
-chmod +x "$BIN_DIR/smart_client.py"     2>/dev/null || true
-chmod +x "$UI_DIR/api.cgi"              2>/dev/null || true
-log_message "Set execute permissions"
+# ─────────────────────────────────────────────────────────────────────────
+# 5. 결과 파일 디렉터리 생성
+# ─────────────────────────────────────────────────────────────────────────
 
-# ── 7. VAR 디렉터리 소유권 ────────────────────────────────────────────
-chown -R root:synosmartinfo "$VAR_DIR" 2>/dev/null || true
-chmod 775 "$VAR_DIR"                    2>/dev/null || true
+if mkdir -p "$RESULT_DIR" 2>/dev/null; then
+  chmod 755 "$RESULT_DIR"
+  chown nobody:nogroup "$RESULT_DIR" 2>/dev/null || true
+  log_message "Result directory ready: $RESULT_DIR"
+else
+  log_message "WARNING: Failed to create result directory"
+fi
 
-log_message "Post-installation completed successfully"
+# ─────────────────────────────────────────────────────────────────────────
+# 6. 실행 권한 설정
+# ─────────────────────────────────────────────────────────────────────────
+
+for bin in "$BIN_DIR"/{syno_smart_info.sh,smart_helper,smart_client.py}; do
+  [ -f "$bin" ] && chmod +x "$bin" && log_message "Set +x: $bin"
+done
+
+[ -f "$UI_DIR/api.cgi" ] && chmod +x "$UI_DIR/api.cgi" && log_message "Set +x: api.cgi"
+
+# ─────────────────────────────────────────────────────────────────────────
+# 7. VAR 디렉터리 소유권 조정
+# ─────────────────────────────────────────────────────────────────────────
+
+chown -R root:$PKG_NAME "$VAR_DIR" 2>/dev/null || true
+chmod 775 "$VAR_DIR" 2>/dev/null || true
+log_message "VAR_DIR ownership set: root:$PKG_NAME"
+
+# ─────────────────────────────────────────────────────────────────────────
+# 8. 최종 상태 확인
+# ─────────────────────────────────────────────────────────────────────────
+
+log_message "=== Post-installation COMPLETED successfully ==="
+log_message "PKG_NAME: $PKG_NAME"
+log_message "VAR_DIR: $VAR_DIR"
+log_message "SUDOERS: $SUDOERS_FILE"
+log_message "WEBMAN: $WEBMAN_DIR"
+
+# 설치 로그 내용 출력 (디버깅용)
+echo "Installation log saved to: $LOG_FILE"
+tail -n 10 "$LOG_FILE"
+
 exit 0
