@@ -95,8 +95,9 @@ def handle_smart_scan(option: str) -> dict:
     # Quick options finish in seconds; full scan may take up to 240 s
     timeout = 30 if option in ("-v", "-h") else 240
 
-    # Build command — only the script path and one pre-validated option flag
-    cmd = [SMART_SCRIPT]
+    # synosmartinfo 계정은 start-stop-status 에 의해 실행되므로 비root 이다.
+    # postinst 에서 설정한 narrow sudoers 를 통해 스크립트를 root 로 실행한다.
+    cmd = ["sudo", SMART_SCRIPT]
     if option:
         cmd.append(option)  # option is guaranteed to be in ALLOWED_OPTIONS
 
@@ -240,10 +241,8 @@ def run_server() -> None:
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    if os.geteuid() != 0:
-        print("ERROR: smart_helper must run as root", file=sys.stderr)
-        sys.exit(1)
-
+    # synosmartinfo 계정으로 실행된다 (conf/privilege 선언).
+    # root 체크 불필요 — SMART 실행은 narrow sudoers 로 위임.
     setup_logging()
 
     # Write PID file before entering server loop

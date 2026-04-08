@@ -2,8 +2,10 @@
 #
 # SynoSmartInfo start-stop-status
 #
-# DSM 은 이 스크립트를 root 권한으로 실행한다.
-# smart_helper 는 root 데몬으로 기동되어야 하므로 여기서 직접 실행한다.
+# conf/privilege 에 "run-as": "synosmartinfo" 로 선언되어 있으므로
+# 이 스크립트는 synosmartinfo 계정으로 실행된다.
+# smart_helper 도 synosmartinfo 로 실행되며, SMART 실행은
+# narrow sudoers 를 통해 syno_smart_info.sh 만 root 로 위임한다.
 #
 
 PKG_NAME="Synosmartinfo"

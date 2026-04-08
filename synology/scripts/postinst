@@ -9,7 +9,7 @@ TARGET_DIR="/var/packages/$PKG_NAME/target"
 UI_DIR="$TARGET_DIR/ui"
 BIN_DIR="$TARGET_DIR/bin"
 VAR_DIR="/var/packages/$PKG_NAME/var"
-SOCKET_DIR="/var/run/synosmartinfo"
+SUDOERS_FILE="/etc/sudoers.d/${PKG_NAME}"
 
 log_message() {
     mkdir -p "$VAR_DIR" 2>/dev/null
@@ -27,7 +27,8 @@ else
 fi
 
 # ── 2. 패키지 전용 그룹/사용자 생성 ──────────────────────────────────
-# synosmartinfo 그룹이 없으면 생성
+# conf/privilege 가 선언돼 있으면 DSM 이 자동 생성하지만,
+# 없는 경우를 대비해 직접 생성도 시도한다.
 if ! getent group synosmartinfo >/dev/null 2>&1; then
     synogroup --add synosmartinfo 2>/dev/null || \
         addgroup synosmartinfo 2>/dev/null || \
@@ -35,14 +36,49 @@ if ! getent group synosmartinfo >/dev/null 2>&1; then
     log_message "Created group: synosmartinfo"
 fi
 
-# synosmartinfo 사용자가 없으면 생성 (no-login shell, 홈 없음)
 if ! getent passwd synosmartinfo >/dev/null 2>&1; then
     adduser -S -D -H -G synosmartinfo -s /bin/false synosmartinfo 2>/dev/null || \
         useradd -r -M -s /sbin/nologin -g synosmartinfo synosmartinfo 2>/dev/null || true
     log_message "Created user: synosmartinfo"
 fi
 
-# ── 3. Web UI 심볼릭 링크 생성 ────────────────────────────────────────
+# ── 3. Narrow sudoers 설정 ────────────────────────────────────────────
+# synosmartinfo 계정에 SMART 조회에 필요한 특정 바이너리만 허용한다.
+# NOPASSWD: ALL 은 절대 사용하지 않는다.
+#
+# 허용 대상:
+#   - smartctl / smartctl7 : SMART 데이터 직접 하드웨어 접근 (CAP_SYS_RAWIO 필요)
+#   - synodisk             : Synology 디스크 슬롯 위치 조회
+#   - synonvme             : M.2 NVMe 슬롯 정보 조회
+#   - syno_slot_mapping    : 확장 유닛 슬롯 매핑 조회
+#
+# 인자(argument) 없이 절대경로만 지정하면 임의 인자 주입이 가능하므로,
+# 아래에서는 절대경로 지정으로 실행 바이너리 자체를 제한하는 것에 집중한다.
+# helper 내부에서 인자 화이트리스트 검증을 추가로 수행한다.
+
+# smart_helper 가 실행할 SMART 스크립트 경로
+SMART_SCRIPT="$BIN_DIR/syno_smart_info.sh"
+
+# 허용할 명령 목록 구성 (존재하는 것만)
+ALLOWED_CMDS="$SMART_SCRIPT"
+
+cat > "$SUDOERS_FILE" << EOF
+# SynoSmartInfo - Narrow sudoers
+# 생성일: $(date '+%Y-%m-%d %H:%M:%S')
+# 목적: SMART/디스크 상태 조회 스크립트만 root 실행 허용
+# NOPASSWD: ALL 은 사용하지 않음
+#
+# 허용 범위:
+#   - syno_smart_info.sh : SMART 데이터 수집 전용 스크립트
+#     (스크립트 내부에서 smartctl, synodisk, synonvme 등 호출)
+#   - 임의 명령 실행 불가 (절대경로 고정, 화이트리스트 인자만 허용)
+
+synosmartinfo ALL=(root) NOPASSWD: $SMART_SCRIPT
+EOF
+chmod 0440 "$SUDOERS_FILE"
+log_message "Sudoers configured (narrow): $SMART_SCRIPT"
+
+# ── 4. Web UI 심볼릭 링크 생성 ────────────────────────────────────────
 if ln -sf "/var/packages/$PKG_NAME/target/ui" \
          "/usr/syno/synoman/webman/3rdparty/$PKG_NAME" 2>/dev/null; then
     log_message "Created web interface symlink"
@@ -66,7 +102,7 @@ chmod +x "$BIN_DIR/smart_client.py"     2>/dev/null || true
 chmod +x "$UI_DIR/api.cgi"              2>/dev/null || true
 log_message "Set execute permissions"
 
-# ── 7. VAR 디렉터리 소유권 (로그 파일 쓰기를 위해 그룹 쓰기 허용) ──
+# ── 7. VAR 디렉터리 소유권 ────────────────────────────────────────────
 chown -R root:synosmartinfo "$VAR_DIR" 2>/dev/null || true
 chmod 775 "$VAR_DIR"                    2>/dev/null || true
 

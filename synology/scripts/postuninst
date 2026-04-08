@@ -12,4 +12,7 @@ rm -f "/usr/syno/synoman/webman/3rdparty/$PKG_NAME"
 rm -f "/var/packages/${PKG_NAME}/var/helper.sock"
 rm -f "/var/packages/${PKG_NAME}/var/helper.pid"
 
+# ── 3. Sudoers 파일 제거 ─────────────────────────────────────────────
+rm -f "/etc/sudoers.d/${PKG_NAME}"
+
 exit 0
