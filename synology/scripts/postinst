@@ -42,13 +42,7 @@ if ! getent passwd synosmartinfo >/dev/null 2>&1; then
     log_message "Created user: synosmartinfo"
 fi
 
-# ── 3. 소켓 디렉터리 생성 및 권한 설정 ────────────────────────────────
-mkdir -p "${SOCKET_DIR}"
-chmod 750 "${SOCKET_DIR}"
-chown root:synosmartinfo "${SOCKET_DIR}" 2>/dev/null || true
-log_message "Socket directory ready: ${SOCKET_DIR}"
-
-# ── 4. Web UI 심볼릭 링크 생성 ────────────────────────────────────────
+# ── 3. Web UI 심볼릭 링크 생성 ────────────────────────────────────────
 if ln -sf "/var/packages/$PKG_NAME/target/ui" \
          "/usr/syno/synoman/webman/3rdparty/$PKG_NAME" 2>/dev/null; then
     log_message "Created web interface symlink"

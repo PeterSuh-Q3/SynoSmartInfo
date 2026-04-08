@@ -9,9 +9,9 @@
 PKG_NAME="Synosmartinfo"
 PKG_ROOT="/var/packages/${PKG_NAME}"
 HELPER="${PKG_ROOT}/target/bin/smart_helper"
-PID_FILE="/var/run/synosmartinfo/helper.pid"
-SOCKET_DIR="/var/run/synosmartinfo"
-LOG_FILE="${PKG_ROOT}/var/start-stop.log"
+VAR_DIR="${PKG_ROOT}/var"
+PID_FILE="${VAR_DIR}/helper.pid"
+LOG_FILE="${VAR_DIR}/start-stop.log"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "${LOG_FILE}" 2>/dev/null
@@ -33,13 +33,7 @@ start)
         exit 1
     fi
 
-    # 소켓 디렉터리를 root:synosmartinfo 소유로 생성
-    mkdir -p "${SOCKET_DIR}"
-    chmod 750 "${SOCKET_DIR}"
-    if getent group synosmartinfo >/dev/null 2>&1; then
-        chown root:synosmartinfo "${SOCKET_DIR}"
-    fi
-
+    # VAR_DIR 는 DSM 이 직접 생성·관리하므로 별도 mkdir 불필요
     python3 "${HELPER}" >> "${LOG_FILE}" 2>&1 &
     BGPID=$!
     log "Started smart_helper (pid=${BGPID})"
@@ -64,7 +58,7 @@ stop)
         kill -0 "${PID}" 2>/dev/null && kill -KILL "${PID}" 2>/dev/null
         log "Stopped smart_helper (pid=${PID})"
     fi
-    rm -f "${PID_FILE}" "/var/run/synosmartinfo/helper.sock"
+    rm -f "${PID_FILE}" "${VAR_DIR}/helper.sock"
     exit 0
     ;;
 

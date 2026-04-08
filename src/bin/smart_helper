@@ -6,8 +6,8 @@ Runs as root. Listens on a Unix domain socket.
 Accepts only whitelisted actions with validated parameters.
 Non-root processes (api.cgi) communicate via socket — no sudo required.
 
-Socket : /var/run/synosmartinfo/helper.sock  (mode 0660, group synosmartinfo)
-PID    : /var/run/synosmartinfo/helper.pid
+Socket : /var/packages/Synosmartinfo/var/helper.sock  (mode 0666)
+PID    : /var/packages/Synosmartinfo/var/helper.pid
 Log    : /var/packages/Synosmartinfo/var/helper.log
 """
 
@@ -24,7 +24,9 @@ import threading
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-SOCKET_DIR   = "/var/run/synosmartinfo"
+# /var/run 은 DSM 7 샌드박스에서 패키지가 직접 쓸 수 없으므로,
+# DSM 이 직접 생성·관리하는 패키지 전용 var 디렉터리를 사용한다.
+SOCKET_DIR   = "/var/packages/Synosmartinfo/var"
 SOCKET_PATH  = f"{SOCKET_DIR}/helper.sock"
 PID_FILE     = f"{SOCKET_DIR}/helper.pid"
 SMART_SCRIPT = "/var/packages/Synosmartinfo/target/bin/syno_smart_info.sh"
@@ -203,14 +205,9 @@ def run_server() -> None:
         logging.error("Cannot bind socket %s: %s", SOCKET_PATH, exc)
         sys.exit(1)
 
-    # Socket is readable by root + synosmartinfo group only
-    os.chmod(SOCKET_PATH, 0o660)
-    try:
-        gid = grp.getgrnam("synosmartinfo").gr_gid
-        os.chown(SOCKET_PATH, 0, gid)
-    except (KeyError, OSError):
-        # Group might not exist in edge cases; log but continue
-        logging.warning("Could not set group ownership on socket")
+    # 0666: DSM webman CGI 실행 사용자(nobody 등)가 소켓에 접근 가능하도록 허용.
+    # 보안은 소켓 레벨 접근 제한이 아닌 helper 내부 화이트리스트 검증으로 담보한다.
+    os.chmod(SOCKET_PATH, 0o666)
 
     server.listen(5)
     logging.info("smart_helper started (pid=%d, socket=%s)", os.getpid(), SOCKET_PATH)

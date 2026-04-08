@@ -19,7 +19,7 @@ import os
 import socket
 import sys
 
-SOCKET_PATH = "/var/run/synosmartinfo/helper.sock"
+SOCKET_PATH = "/var/packages/Synosmartinfo/var/helper.sock"
 TIMEOUT     = 260  # slightly longer than helper's max scan timeout (240 s)
 MAX_RECV    = 2 * 1024 * 1024  # 2 MB — generous upper bound for SMART output
 
