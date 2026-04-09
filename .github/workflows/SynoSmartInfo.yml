@@ -104,9 +104,9 @@ jobs:
         run: |
           ls -l ./dist
           rm ./dist/*_debug.spk 2>/dev/null || true
-          for f in ./dist/*.spk; do
-            mv "$f" "${f%.spk}.spk"
-          done
+          #for f in ./dist/*.spk; do
+          #  mv "$f" "${f%.spk}.spk"
+          #done
           ls -l ./dist
 
       - name: Upload Package
