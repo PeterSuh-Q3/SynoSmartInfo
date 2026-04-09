@@ -1,149 +1,213 @@
 #!/bin/bash
 
-# SynoSmartInfo post-installation script (DSM 7 호환, privilege.json 제거)
+# SynoSmartInfo post-installation script (DSM 7 호환, DEBUG MODE)
 # DSM은 이 스크립트를 root 권한으로 실행한다.
 
-set -e  # 첫 번째 오류에서 중단
+# ─────────────────────────────────────────────────────────────────────────
+# DEBUG: set -x 로 모든 명령 추적, set -e 제거
+# ─────────────────────────────────────────────────────────────────────────
+set -x   # 모든 명령 실행 전 출력 (디버그 핵심)
+# set -e 제거: 오류 발생해도 계속 진행하며 exit code 수집
+
+# 모든 출력을 stderr(DSM 설치 로그에 캡처됨)로 분기
+exec 2>&1
 
 # ─────────────────────────────────────────────────────────────────────────
 # 상수 및 환경 변수 설정
 # ─────────────────────────────────────────────────────────────────────────
 
-readonly PKG_NAME="${SYNOPKG_PKGNAME:-Synosmartinfo}"
-readonly TARGET_DIR="/var/packages/$PKG_NAME/target"
-readonly UI_DIR="$TARGET_DIR/ui"
-readonly BIN_DIR="$TARGET_DIR/bin"
-readonly VAR_DIR="/var/packages/$PKG_NAME/var"
-readonly SUDOERS_FILE="/etc/sudoers.d/$PKG_NAME"
-readonly RESULT_DIR="/usr/syno/synoman/webman/3rdparty/$PKG_NAME/result"
-readonly LOG_FILE="$VAR_DIR/install.log"
+PKG_NAME="${SYNOPKG_PKGNAME:-Synosmartinfo}"
+TARGET_DIR="/var/packages/$PKG_NAME/target"
+UI_DIR="$TARGET_DIR/ui"
+BIN_DIR="$TARGET_DIR/bin"
+VAR_DIR="/var/packages/$PKG_NAME/var"
+SUDOERS_FILE="/etc/sudoers.d/$PKG_NAME"
+RESULT_DIR="/usr/syno/synoman/webman/3rdparty/$PKG_NAME/result"
+LOG_FILE="$VAR_DIR/install.log"
 
-# 로그 함수 (디렉터리 생성 후 기록)
-log_message() {
-  local msg="$1"
-  local level="${2:-INFO}"
-  mkdir -p "$VAR_DIR" 2>/dev/null || true
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $msg" >> "$LOG_FILE" 2>/dev/null || \
-  echo "[$level] $msg" >&2
+# ─────────────────────────────────────────────────────────────────────────
+# 로그 함수: 파일 + stderr 동시 출력
+# ─────────────────────────────────────────────────────────────────────────
+log() {
+  local level="$1"
+  local msg="$2"
+  local ts
+  ts="$(date '+%Y-%m-%d %H:%M:%S')"
+  local line="[$ts] [$level] $msg"
+  echo "$line" >&2
+  echo "$line" >> "$LOG_FILE" 2>/dev/null || true
 }
 
-log_message "=== Post-installation STARTING for: $PKG_NAME ==="
+dbg() { log "DEBUG" "$1"; }
+inf() { log "INFO"  "$1"; }
+wrn() { log "WARN"  "$1"; }
+err() { log "ERROR" "$1"; }
 
 # ─────────────────────────────────────────────────────────────────────────
-# 1. VAR 디렉터리 생성 (로그 저장용)
+# 실패 추적 변수
 # ─────────────────────────────────────────────────────────────────────────
-
-if ! mkdir -p "$VAR_DIR" 2>/dev/null; then
-  echo "ERROR: Cannot create $VAR_DIR" >&2
-  exit 1
-fi
-chmod 775 "$VAR_DIR"  # DSM이 자동 소유권 관리하므로 chown 불필요
-log_message "VAR_DIR ready: $VAR_DIR"
-
-# ─────────────────────────────────────────────────────────────────────────
-# 2. 그룹/사용자 생성 생략 (privilege.json이 DSM 자동 처리)
-# ─────────────────────────────────────────────────────────────────────────
-
-log_message "Skipping manual group/user creation (DSM privilege.json handles it)"
+FAIL=0
+fail_step() {
+  local step="$1"
+  local rc="$2"
+  err "STEP FAILED: $step (exit=$rc)"
+  FAIL=$((FAIL + 1))
+}
 
 # ─────────────────────────────────────────────────────────────────────────
-# 3. Narrow sudoers 설정 (Narrow Privilege)
+# STEP 0: 환경 진단
 # ─────────────────────────────────────────────────────────────────────────
+inf "=== POST-INSTALL START: $PKG_NAME ==="
+dbg "WHOAMI      : $(whoami 2>&1)"
+dbg "UID/GID     : $(id 2>&1)"
+dbg "SYNOPKG_*   : PKGNAME=${SYNOPKG_PKGNAME:-UNSET} PKGDEST=${SYNOPKG_PKGDEST:-UNSET}"
+dbg "TARGET_DIR  : $TARGET_DIR  exists=$([ -d "$TARGET_DIR" ] && echo YES || echo NO)"
+dbg "BIN_DIR     : $BIN_DIR     exists=$([ -d "$BIN_DIR" ] && echo YES || echo NO)"
+dbg "UI_DIR      : $UI_DIR      exists=$([ -d "$UI_DIR" ] && echo YES || echo NO)"
+dbg "VAR_DIR     : $VAR_DIR     exists=$([ -d "$VAR_DIR" ] && echo YES || echo NO)"
+dbg "SUDOERS_DIR : /etc/sudoers.d exists=$([ -d /etc/sudoers.d ] && echo YES || echo NO)"
+dbg "RESULT_DIR  : $RESULT_DIR  exists=$([ -d "$RESULT_DIR" ] && echo YES || echo NO)"
+dbg "--- TARGET tree ---"
+ls -la "$TARGET_DIR" 2>&1 || dbg "(TARGET_DIR not found)"
+dbg "--- BIN_DIR tree ---"
+ls -la "$BIN_DIR" 2>&1 || dbg "(BIN_DIR not found)"
 
-# set -e 일시 해제 (heredoc 내부 명령 실패 방지)
-set +e
+# ─────────────────────────────────────────────────────────────────────────
+# STEP 1: VAR 디렉터리 생성
+# ─────────────────────────────────────────────────────────────────────────
+inf "--- STEP 1: Create VAR_DIR ---"
+mkdir -p "$VAR_DIR" 2>&1; rc=$?
+dbg "mkdir VAR_DIR rc=$rc"
+[ $rc -ne 0 ] && fail_step "mkdir VAR_DIR" $rc
+
+chmod 775 "$VAR_DIR" 2>&1; rc=$?
+dbg "chmod 775 VAR_DIR rc=$rc"
+[ $rc -ne 0 ] && fail_step "chmod VAR_DIR" $rc
+
+dbg "VAR_DIR stat: $(stat "$VAR_DIR" 2>&1)"
+inf "STEP 1 done"
+
+# ─────────────────────────────────────────────────────────────────────────
+# STEP 2: sudoers 설정
+# ─────────────────────────────────────────────────────────────────────────
+inf "--- STEP 2: Configure sudoers ---"
 
 SMART_SCRIPT="$BIN_DIR/syno_smart_info.sh"
+dbg "SMART_SCRIPT path: $SMART_SCRIPT"
+dbg "SMART_SCRIPT exists: $([ -f "$SMART_SCRIPT" ] && echo YES || echo NO)"
 
-# sudoers 라인 사전 결정 (heredoc 밖에서)
 if [ -f "$SMART_SCRIPT" ]; then
   SUDOERS_LINE="synosmartinfo ALL=(root) NOPASSWD: $SMART_SCRIPT"
-  log_message "SMART script found: $SMART_SCRIPT"
+  inf "SMART script found → sudoers line set"
 else
-  SUDOERS_LINE="# SMART_SCRIPT not found at install time - update manually"
-  log_message "WARNING: SMART script not found at $SMART_SCRIPT"
+  SUDOERS_LINE="# SMART_SCRIPT not found at install time: $SMART_SCRIPT"
+  wrn "SMART script NOT found → placeholder comment in sudoers"
 fi
 
-set -e  # 재활성화
+dbg "SUDOERS_LINE: $SUDOERS_LINE"
+dbg "SUDOERS_FILE: $SUDOERS_FILE"
+dbg "SUDOERS_TMP : ${SUDOERS_FILE}.tmp"
 
-# sudoers.d 디렉터리 확인
+# sudoers.d 존재 확인
 if [ ! -d "/etc/sudoers.d" ]; then
-  log_message "ERROR: /etc/sudoers.d directory missing"
-  exit 1
-fi
-
-# 기존 파일 백업
-if [ -f "$SUDOERS_FILE" ]; then
-  mv "$SUDOERS_FILE" "${SUDOERS_FILE}.backup.$(date +%s)" 2>/dev/null || true
-fi
-
-# tmp 파일 생성 ($() 치환 없이 순수 변수만 사용)
-SUDOERS_TMP="${SUDOERS_FILE}.tmp"
-cat > "$SUDOERS_TMP" << EOF
-#
-# SynoSmartInfo - Narrow sudoers (auto-generated)
-# Generated: $(date '+%Y-%m-%d %H:%M:%S')
-# Purpose: Allow SMART script execution only
-#
-${SUDOERS_LINE}
-EOF
-
-if [ ! -f "$SUDOERS_TMP" ]; then
-  log_message "ERROR: Failed to create sudoers tmp file"
-  exit 1
-fi
-
-mv "$SUDOERS_TMP" "$SUDOERS_FILE"
-chmod 0440 "$SUDOERS_FILE"
-chown root:root "$SUDOERS_FILE"
-
-if visudo -cf "$SUDOERS_FILE" >/dev/null 2>&1; then
-  log_message "Sudoers syntax verified OK: $SUDOERS_FILE"
+  err "/etc/sudoers.d missing — cannot create sudoers"
+  fail_step "sudoers.d check" 1
 else
-  log_message "WARNING: Sudoers syntax check failed"
+  dbg "/etc/sudoers.d stat: $(ls -la /etc/sudoers.d 2>&1)"
+
+  # 기존 백업
+  if [ -f "$SUDOERS_FILE" ]; then
+    BACKUP="${SUDOERS_FILE}.backup.$(date +%s)"
+    mv "$SUDOERS_FILE" "$BACKUP" 2>&1; rc=$?
+    dbg "backup mv rc=$rc → $BACKUP"
+  fi
+
+  # tmp 파일 생성 (printf 사용, heredoc 회피)
+  SUDOERS_TMP="${SUDOERS_FILE}.tmp"
+  dbg "Writing tmp file: $SUDOERS_TMP"
+
+  printf '%s\n' \
+    "#" \
+    "# SynoSmartInfo - Narrow sudoers (auto-generated)" \
+    "# Generated: $(date '+%Y-%m-%d %H:%M:%S')" \
+    "# Purpose: Allow SMART script execution only" \
+    "#" \
+    "$SUDOERS_LINE" \
+    > "$SUDOERS_TMP" 2>&1
+  rc=$?
+  dbg "printf to tmp rc=$rc"
+
+  if [ $rc -ne 0 ] || [ ! -f "$SUDOERS_TMP" ]; then
+    err "Failed to write SUDOERS_TMP (rc=$rc, exists=$([ -f "$SUDOERS_TMP" ] && echo YES || echo NO))"
+    fail_step "write sudoers.tmp" $rc
+  else
+    dbg "SUDOERS_TMP content:"
+    cat "$SUDOERS_TMP" >&2
+
+    mv "$SUDOERS_TMP" "$SUDOERS_FILE" 2>&1; rc=$?
+    dbg "mv tmp→sudoers rc=$rc"
+    [ $rc -ne 0 ] && fail_step "mv sudoers.tmp" $rc
+
+    chmod 0440 "$SUDOERS_FILE" 2>&1; rc=$?
+    dbg "chmod 0440 sudoers rc=$rc"
+
+    chown root:root "$SUDOERS_FILE" 2>&1; rc=$?
+    dbg "chown root:root sudoers rc=$rc"
+
+    if visudo -cf "$SUDOERS_FILE" 2>&1; then
+      inf "visudo syntax OK"
+    else
+      wrn "visudo syntax check FAILED (non-fatal)"
+    fi
+  fi
 fi
+inf "STEP 2 done"
 
 # ─────────────────────────────────────────────────────────────────────────
-# 4. Web UI 심볼릭 링크 생성
+# STEP 3: Web UI 심볼릭 링크
 # ─────────────────────────────────────────────────────────────────────────
-
+inf "--- STEP 3: Web UI symlink ---"
 WEBMAN_DIR="/usr/syno/synoman/webman/3rdparty/$PKG_NAME"
-if [ -d "$UI_DIR" ] && ln -sf "$UI_DIR" "$WEBMAN_DIR" 2>/dev/null; then
-  log_message "Created web UI symlink: $WEBMAN_DIR -> $UI_DIR"
+dbg "UI_DIR   : $UI_DIR  exists=$([ -d "$UI_DIR" ] && echo YES || echo NO)"
+dbg "WEBMAN   : $WEBMAN_DIR  exists=$([ -e "$WEBMAN_DIR" ] && echo YES || echo NO)"
+
+if [ -d "$UI_DIR" ]; then
+  ln -sf "$UI_DIR" "$WEBMAN_DIR" 2>&1; rc=$?
+  dbg "ln -sf rc=$rc"
+  [ $rc -ne 0 ] && wrn "symlink failed rc=$rc (may already exist)"
+  inf "symlink: $WEBMAN_DIR → $UI_DIR"
 else
-  log_message "WARNING: Failed to create web UI symlink (may already exist)"
+  wrn "UI_DIR not found — skipping symlink"
 fi
+inf "STEP 3 done"
 
 # ─────────────────────────────────────────────────────────────────────────
-# 5. 결과 파일 디렉터리 생성
+# STEP 4: 결과 파일 디렉터리
 # ─────────────────────────────────────────────────────────────────────────
-
-if mkdir -p "$RESULT_DIR" 2>/dev/null; then
-  chmod 755 "$RESULT_DIR"
-  # chown nobody:nogroup 생략 (DSM Btrfs 제한)
-  log_message "Result directory ready: $RESULT_DIR"
-else
-  log_message "WARNING: Failed to create result directory"
-fi
+inf "--- STEP 4: Result directory ---"
+mkdir -p "$RESULT_DIR" 2>&1; rc=$?
+dbg "mkdir RESULT_DIR rc=$rc"
+chmod 755 "$RESULT_DIR" 2>&1; rc=$?
+dbg "chmod RESULT_DIR rc=$rc"
+inf "STEP 4 done"
 
 # ─────────────────────────────────────────────────────────────────────────
-# 6. 실행 권한 설정
+# STEP 5: 실행 권한
 # ─────────────────────────────────────────────────────────────────────────
-
-[ -f "$UI_DIR/api.cgi" ] && chmod +x "$UI_DIR/api.cgi" && log_message "Set +x: api.cgi"
-[ -f "$BIN_DIR/syno_smart_info.sh" ] && chmod +x "$BIN_DIR/syno_smart_info.sh" && log_message "Set +x: syno_smart_info.sh"
+inf "--- STEP 5: Set execute permissions ---"
+for f in "$UI_DIR/api.cgi" "$BIN_DIR/syno_smart_info.sh"; do
+  if [ -f "$f" ]; then
+    chmod +x "$f" 2>&1; rc=$?
+    dbg "chmod +x $f rc=$rc"
+  else
+    dbg "SKIP (not found): $f"
+  fi
+done
+inf "STEP 5 done"
 
 # ─────────────────────────────────────────────────────────────────────────
-# 7. 최종 상태 확인 (chown 완전 제거)
+# FINAL
 # ─────────────────────────────────────────────────────────────────────────
+inf "=== POST-INSTALL COMPLETE: FAIL_COUNT=$FAIL ==="
 
-log_message "=== Post-installation COMPLETED successfully ==="
-log_message "PKG_NAME: $PKG_NAME"
-log_message "VAR_DIR: $VAR_DIR (DSM auto-management)"
-log_message "SUDOERS: $SUDOERS_FILE"
-log_message "WEBMAN: $WEBMAN_DIR"
-
-echo "Installation log saved to: $LOG_FILE"
-tail -n 10 "$LOG_FILE"
-
-exit 0
+[ "$FAIL" -gt 0 ] && exit 1 || exit 0
