@@ -50,14 +50,21 @@ log_message "Skipping manual group/user creation (DSM privilege.json handles it)
 # 3. Narrow sudoers 설정 (Narrow Privilege)
 # ─────────────────────────────────────────────────────────────────────────
 
-log_message "Configuring narrow sudoers: $SUDOERS_FILE"
+# set -e 일시 해제 (heredoc 내부 명령 실패 방지)
+set +e
 
-# SMART 스크립트 경로 확인
 SMART_SCRIPT="$BIN_DIR/syno_smart_info.sh"
-if [ ! -f "$SMART_SCRIPT" ]; then
-  log_message "WARNING: SMART script not found: $SMART_SCRIPT"
-  SMART_SCRIPT=""
+
+# sudoers 라인 사전 결정 (heredoc 밖에서)
+if [ -f "$SMART_SCRIPT" ]; then
+  SUDOERS_LINE="synosmartinfo ALL=(root) NOPASSWD: $SMART_SCRIPT"
+  log_message "SMART script found: $SMART_SCRIPT"
+else
+  SUDOERS_LINE="# SMART_SCRIPT not found at install time - update manually"
+  log_message "WARNING: SMART script not found at $SMART_SCRIPT"
 fi
+
+set -e  # 재활성화
 
 # sudoers.d 디렉터리 확인
 if [ ! -d "/etc/sudoers.d" ]; then
@@ -68,37 +75,32 @@ fi
 # 기존 파일 백업
 if [ -f "$SUDOERS_FILE" ]; then
   mv "$SUDOERS_FILE" "${SUDOERS_FILE}.backup.$(date +%s)" 2>/dev/null || true
-  log_message "Backed up existing sudoers file"
 fi
 
-# sudoers 내용 생성 (tmp 파일로 안전하게)
-cat > "${SUDOERS_FILE}.tmp" << EOF
+# tmp 파일 생성 ($() 치환 없이 순수 변수만 사용)
+SUDOERS_TMP="${SUDOERS_FILE}.tmp"
+cat > "$SUDOERS_TMP" << EOF
 #
 # SynoSmartInfo - Narrow sudoers (auto-generated)
 # Generated: $(date '+%Y-%m-%d %H:%M:%S')
-# Purpose: Allow SMART script execution only (NO NOPASSWD: ALL)
+# Purpose: Allow SMART script execution only
 #
-
-# DSM privilege.json이 synosmartinfo 계정 자동 생성
-# synosmartinfo → root으로 SMART 스크립트만 실행 허용
-$( [ -n "$SMART_SCRIPT" ] && echo "synosmartinfo ALL=(root) NOPASSWD: $SMART_SCRIPT" || echo "# SMART_SCRIPT not found - no sudoers entry" )
+${SUDOERS_LINE}
 EOF
 
-if [ -f "${SUDOERS_FILE}.tmp" ]; then
-  mv "${SUDOERS_FILE}.tmp" "$SUDOERS_FILE"
-  chmod 0440 "$SUDOERS_FILE"
-  chown root:root "$SUDOERS_FILE"
-  log_message "Narrow sudoers created successfully: $SUDOERS_FILE"
-  
-  # sudoers syntax 검증
-  if visudo -cf "$SUDOERS_FILE" >/dev/null 2>&1; then
-    log_message "Sudoers syntax verified OK"
-  else
-    log_message "WARNING: Sudoers syntax check failed"
-  fi
-else
-  log_message "ERROR: Failed to create sudoers file"
+if [ ! -f "$SUDOERS_TMP" ]; then
+  log_message "ERROR: Failed to create sudoers tmp file"
   exit 1
+fi
+
+mv "$SUDOERS_TMP" "$SUDOERS_FILE"
+chmod 0440 "$SUDOERS_FILE"
+chown root:root "$SUDOERS_FILE"
+
+if visudo -cf "$SUDOERS_FILE" >/dev/null 2>&1; then
+  log_message "Sudoers syntax verified OK: $SUDOERS_FILE"
+else
+  log_message "WARNING: Sudoers syntax check failed"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────
