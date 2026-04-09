@@ -37,8 +37,7 @@ if ! mkdir -p "$VAR_DIR" 2>/dev/null; then
   echo "ERROR: Cannot create $VAR_DIR" >&2
   exit 1
 fi
-chmod 775 "$VAR_DIR"
-chown root:$PKG_NAME "$VAR_DIR"
+chmod 775 "$VAR_DIR"  # chown 제거!
 log_message "VAR_DIR ready: $VAR_DIR"
 
 # ─────────────────────────────────────────────────────────────────────────
