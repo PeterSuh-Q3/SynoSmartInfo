@@ -1,4 +1,3 @@
-
 name: Build n Release Synology Smart Info Package (Cache-Controlled)
 on:
   workflow_dispatch:
@@ -50,9 +49,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Get latest syno_smart_info.sh
+      # ---------------------------------------------------------------
+      # [FIX 1] 외부 스크립트를 캐시 키 계산 전에 먼저 다운로드하고
+      #         upstream 커밋 SHA를 캐시 키에 포함시켜
+      #         외부 소스 변경 시 캐시가 무효화되도록 수정
+      # ---------------------------------------------------------------
+      - name: Get latest syno_smart_info.sh and capture upstream commit hash
+        id: get_script
         run: |
-          curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh             -o ./src/bin/syno_smart_info.sh
+          COMMIT=$(curl -s https://api.github.com/repos/007revad/Synology_SMART_info/commits/main \
+            | jq -r .sha | cut -c1-8)
+          echo "Upstream commit: $COMMIT"
+          echo "commit=$COMMIT" >> $GITHUB_OUTPUT
+          curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh \
+            -o ./src/bin/syno_smart_info.sh
 
       - name: Cache Docker layers
         uses: actions/cache@v4
@@ -66,13 +76,17 @@ jobs:
         run: |
           docker pull ghcr.io/tomgrv/synology-package-builder:v1.3.0 || true
 
+      # ---------------------------------------------------------------
+      # [FIX 1 계속] 캐시 키에 upstream 커밋 해시(${{ steps.get_script.outputs.commit }})
+      #              추가 → 외부 스크립트 변경 시 캐시 자동 무효화
+      # ---------------------------------------------------------------
       - name: Cache dist packages
         id: cache_dist
         if: github.event.inputs.use_cache != 'false'
         uses: actions/cache@v4
         with:
           path: ./dist
-          key: dist-${{ matrix.arch }}-${{ matrix.dsm }}-${{ hashFiles('src/**') }}
+          key: dist-${{ matrix.arch }}-${{ matrix.dsm }}-${{ hashFiles('src/**') }}-${{ steps.get_script.outputs.commit }}
           restore-keys: |
             dist-${{ matrix.arch }}-${{ matrix.dsm }}-
 
@@ -104,9 +118,6 @@ jobs:
         run: |
           ls -l ./dist
           rm ./dist/*_debug.spk 2>/dev/null || true
-          #for f in ./dist/*.spk; do
-          #  mv "$f" "${f%.spk}.spk"
-          #done
           ls -l ./dist
 
       - name: Upload Package
@@ -115,8 +126,13 @@ jobs:
           name: SynoSmartInfo-${{ matrix.dsm }}-${{ github.event.inputs.use_cache || 'cached' }}
           path: ./dist/*.spk
 
+      # ---------------------------------------------------------------
+      # [FIX 2] workflow_dispatch 실행 시 github.ref_type은 항상 'branch'이므로
+      #         'tag' 조건을 제거하고, use_cache == 'false'일 때만 릴리즈 제외
+      #         (강제 재빌드=캐시 무시 시에는 테스트 목적으로 간주하여 릴리즈 스킵)
+      # ---------------------------------------------------------------
       - name: Release
-        if: github.event.inputs.use_cache == 'true' && github.ref_type == 'tag'
+        if: github.event.inputs.use_cache != 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.new_tag }}
