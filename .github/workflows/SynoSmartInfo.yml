@@ -64,62 +64,14 @@ jobs:
           curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh \
             -o ./src/bin/syno_smart_info.sh
 
-      - name: Cache Docker layers
-        id: cache-docker
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: docker-${{ runner.os }}-synology-package-builder-v1.3.0
-          restore-keys: |
-            docker-${{ runner.os }}-synology-package-builder-
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:latest
-      
-      - name: Pull & cache builder image
-        run: |
-          # 캐시 히트 시 → 로컬 tar에서 이미지 복원
-          if [ -f /tmp/.buildx-cache/synology-package-builder.tar ]; then
-            echo "✅ Cache HIT: Loading image from cache..."
-            docker load -i /tmp/.buildx-cache/synology-package-builder.tar
-          else
-            echo "⬇️  Cache MISS: Pulling from ghcr.io..."
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            docker pull ghcr.io/tomgrv/synology-package-builder:v1.3.0
-            # 다음 실행을 위해 캐시 저장
-            mkdir -p /tmp/.buildx-cache
-            docker save ghcr.io/tomgrv/synology-package-builder:v1.3.0 \
-              -o /tmp/.buildx-cache/synology-package-builder.tar
-            echo "💾 Image saved to cache"
-          fi
-          
-      # ---------------------------------------------------------------
-      # [FIX 1 계속] 캐시 키에 upstream 커밋 해시(${{ steps.get_script.outputs.commit }})
-      #              추가 → 외부 스크립트 변경 시 캐시 자동 무효화
-      # ---------------------------------------------------------------
-      - name: Cache dist packages
-        id: cache_dist
-        if: github.event.inputs.use_cache != 'false'
-        uses: actions/cache@v4
-        with:
-          path: ./dist
-          key: dist-${{ matrix.arch }}-${{ matrix.dsm }}-${{ hashFiles('src/**') }}-${{ steps.get_script.outputs.commit }}
-          restore-keys: |
-            dist-${{ matrix.arch }}-${{ matrix.dsm }}-
-
       - name: Synology Package Builder Github Action
-        if: steps.cache_dist.outputs.cache-hit != 'true' || github.event.inputs.use_cache == 'false'
         uses: tomgrv/synology-package-builder@v1.3.0
         with:
           dsm: ${{ matrix.dsm }}
           arch: ${{ matrix.arch }}
           output: ./dist
-
+          
       - name: Add dsmappname to INFO
-        if: steps.cache_dist.outputs.cache-hit != 'true' || github.event.inputs.use_cache == 'false'
         run: |
           for f in ./dist/*.spk; do
             [[ "$f" == *_debug.spk ]] && continue
@@ -134,7 +86,6 @@ jobs:
           done
 
       - name: Remove debug spk and rename package
-        if: steps.cache_dist.outputs.cache-hit != 'true' || github.event.inputs.use_cache == 'false'
         run: |
           ls -l ./dist
           rm ./dist/*_debug.spk 2>/dev/null || true
