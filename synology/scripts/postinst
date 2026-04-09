@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# SynoSmartInfo post-installation script (DSM 7 호환)
+# SynoSmartInfo post-installation script (DSM 7 호환, privilege.json 제거)
 # DSM은 이 스크립트를 root 권한으로 실행한다.
 
 set -e  # 첫 번째 오류에서 중단
@@ -37,12 +37,14 @@ if ! mkdir -p "$VAR_DIR" 2>/dev/null; then
   echo "ERROR: Cannot create $VAR_DIR" >&2
   exit 1
 fi
-chmod 775 "$VAR_DIR"  # chown 제거!
+chmod 775 "$VAR_DIR"  # DSM이 자동 소유권 관리하므로 chown 불필요
 log_message "VAR_DIR ready: $VAR_DIR"
 
 # ─────────────────────────────────────────────────────────────────────────
-# 2. 패키지 전용 그룹/사용자 생성 (idempotent), 생략
+# 2. 그룹/사용자 생성 생략 (privilege.json이 DSM 자동 처리)
 # ─────────────────────────────────────────────────────────────────────────
+
+log_message "Skipping manual group/user creation (DSM privilege.json handles it)"
 
 # ─────────────────────────────────────────────────────────────────────────
 # 3. Narrow sudoers 설정 (Narrow Privilege)
@@ -50,11 +52,11 @@ log_message "VAR_DIR ready: $VAR_DIR"
 
 log_message "Configuring narrow sudoers: $SUDOERS_FILE"
 
-# SMART 스크립트 경로 (실제 존재하는지 확인)
+# SMART 스크립트 경로 확인
 SMART_SCRIPT="$BIN_DIR/syno_smart_info.sh"
 if [ ! -f "$SMART_SCRIPT" ]; then
   log_message "WARNING: SMART script not found: $SMART_SCRIPT"
-  SMART_SCRIPT=""  # 빈 값으로 두고 sudoers에서 제외
+  SMART_SCRIPT=""
 fi
 
 # sudoers.d 디렉터리 확인
@@ -77,7 +79,8 @@ cat > "${SUDOERS_FILE}.tmp" << EOF
 # Purpose: Allow SMART script execution only (NO NOPASSWD: ALL)
 #
 
-# Allow synosmartinfo to run specific SMART script as root
+# DSM privilege.json이 synosmartinfo 계정 자동 생성
+# synosmartinfo → root으로 SMART 스크립트만 실행 허용
 $( [ -n "$SMART_SCRIPT" ] && echo "synosmartinfo ALL=(root) NOPASSWD: $SMART_SCRIPT" || echo "# SMART_SCRIPT not found - no sudoers entry" )
 EOF
 
@@ -115,7 +118,7 @@ fi
 
 if mkdir -p "$RESULT_DIR" 2>/dev/null; then
   chmod 755 "$RESULT_DIR"
-  chown nobody:nogroup "$RESULT_DIR" 2>/dev/null || true
+  # chown nobody:nogroup 생략 (DSM Btrfs 제한)
   log_message "Result directory ready: $RESULT_DIR"
 else
   log_message "WARNING: Failed to create result directory"
@@ -126,26 +129,18 @@ fi
 # ─────────────────────────────────────────────────────────────────────────
 
 [ -f "$UI_DIR/api.cgi" ] && chmod +x "$UI_DIR/api.cgi" && log_message "Set +x: api.cgi"
+[ -f "$BIN_DIR/syno_smart_info.sh" ] && chmod +x "$BIN_DIR/syno_smart_info.sh" && log_message "Set +x: syno_smart_info.sh"
 
 # ─────────────────────────────────────────────────────────────────────────
-# 7. VAR 디렉터리 소유권 조정
-# ─────────────────────────────────────────────────────────────────────────
-
-chown -R root:$PKG_NAME "$VAR_DIR" 2>/dev/null || true
-chmod 775 "$VAR_DIR" 2>/dev/null || true
-log_message "VAR_DIR ownership set: root:$PKG_NAME"
-
-# ─────────────────────────────────────────────────────────────────────────
-# 8. 최종 상태 확인
+# 7. 최종 상태 확인 (chown 완전 제거)
 # ─────────────────────────────────────────────────────────────────────────
 
 log_message "=== Post-installation COMPLETED successfully ==="
 log_message "PKG_NAME: $PKG_NAME"
-log_message "VAR_DIR: $VAR_DIR"
+log_message "VAR_DIR: $VAR_DIR (DSM auto-management)"
 log_message "SUDOERS: $SUDOERS_FILE"
 log_message "WEBMAN: $WEBMAN_DIR"
 
-# 설치 로그 내용 출력 (디버깅용)
 echo "Installation log saved to: $LOG_FILE"
 tail -n 10 "$LOG_FILE"
 
