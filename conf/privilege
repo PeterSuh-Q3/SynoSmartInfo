@@ -1,12 +1,7 @@
 {
   "defaults": {
-    "run-as": "package"
+    "run-as": "root"
   },
   "username": "synosmartinfo",
-  "groupname": "synosmartinfo",
-  "ctrl-script": [
-    { "action": "postinst", "run-as": "root" },
-    { "action": "preuninst", "run-as": "root" },
-    { "action": "postuninst", "run-as": "root" }
-  ]
+  "groupname": "synosmartinfo"
 }
