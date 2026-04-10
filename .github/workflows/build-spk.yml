@@ -32,7 +32,7 @@ jobs:
       - name: Build Synology package
         uses: tomgrv/synology-package-builder@v1.3.0
         with:
-          dsm:     "7.0"
+          dsm:     "7.2"
           arch:    "noarch"
           projects: ./src
           output:  ./dist
