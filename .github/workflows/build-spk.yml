@@ -29,6 +29,17 @@ jobs:
         uses: actions/checkout@v4
 
       # ── .spk 빌드 ────────────────────────────────────────────────────────────
+      - name: Prepare Synology toolkit chroot
+        run: |
+          TOOLKIT_DIR=".toolkit"
+          mkdir -p "$TOOLKIT_DIR"
+          # Clone pkgscripts-ng if not cached
+          if [ ! -d "$TOOLKIT_DIR/pkgscripts-ng" ]; then
+            git clone https://github.com/SynologyOpenSource/pkgscripts-ng.git "$TOOLKIT_DIR/pkgscripts-ng"
+          fi
+          # Deploy the chroot environment for noarch on DSM 7.2
+          sudo "$TOOLKIT_DIR/pkgscripts-ng/EnvDeploy" -v 7.2 -p noarch
+
       - name: Build Synology package
         uses: tomgrv/synology-package-builder@v1.3.0
         with:
