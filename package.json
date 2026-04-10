@@ -20,7 +20,7 @@
     "help_url": "https://github.com/PeterSuh-Q3/SynoSmartInfo#README.md",
     "os_min_ver": "7.0-40337",
     "os_max_ver": "9.9-99999",
-    "arch": "x86_64",
+    "arch": "noarch",
     "displayname": "Syno Smart Info",
     "thirdparty": "yes",
     "beta": "no"
