@@ -8,6 +8,24 @@
 [Introduction and detailed explanation of Syno Smart Info]
 https://www.reddit.com/r/synology/comments/1mgi44b/introducing_synology_custom_package_syno_smart/
 
+# < Another installation method instead of manually installing .spk >
+
+Another installation method instead of manually installing the .spk
+
+You can use 007revad's Synology package repository.
+
+Add this URL to the package sources in the Package Center settings.
+
+https://spkrepo.007daver.workers.dev/
+
+<img width="887" height="373" alt="580502821-e7badc9e-8302-421e-88fc-c140b76c5f2e" src="https://github.com/user-attachments/assets/1e36a2b3-2aeb-4b39-a6ce-a82f5880197d" />
+
+Installable package icons are available as shown below.
+
+<img width="1869" height="334" alt="스크린샷 2026-04-19 오후 8 47 50" src="https://github.com/user-attachments/assets/c00c9023-937f-4af9-9a51-9ef618ed8f79" />
+
+Thanks @007revad
+
 # < Caution >
 
 Synosmartinfo synology user must be granted the authority to process with sudoers.
