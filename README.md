@@ -22,7 +22,7 @@ https://spkrepo.007daver.workers.dev/
 
 Installable package icons are available as shown below.
 
-<img width="1869" height="334" alt="스크린샷 2026-04-19 오후 8 47 50" src="https://github.com/user-attachments/assets/c00c9023-937f-4af9-9a51-9ef618ed8f79" />
+<img width="953" height="614" alt="580502718-67a0de6b-7a0d-493a-b859-79c1d244cdef" src="https://github.com/user-attachments/assets/48cdd566-0ce8-4e73-b0de-f4f1308e18d4" />
 
 Thanks @007revad
 
