@@ -74,7 +74,11 @@ jobs:
           ls -la ./src/bin/helper
 
       - name: Synology Package Builder Github Action
-        uses: tomgrv/synology-package-builder@v1.3.0
+        # Forked from tomgrv/synology-package-builder@v1.3.0: upstream's
+        # docker image is missing xz-utils, so DSM7 chroot deployment
+        # (which extracts .txz toolchains) fails on every non-noarch build.
+        # See PeterSuh-Q3/synology-package-builder@fix/xz-utils-missing
+        uses: PeterSuh-Q3/synology-package-builder@fix/xz-utils-missing
         with:
           dsm: ${{ matrix.dsm }}
           arch: ${{ matrix.arch }}

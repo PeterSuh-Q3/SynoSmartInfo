@@ -97,7 +97,11 @@ jobs:
           chmod 0755 ./src/bin/helper/smartinfo-helper.x86_64
 
       - name: Synology Package Builder Github Action
-        uses: tomgrv/synology-package-builder@v1.3.0
+        # Forked from tomgrv/synology-package-builder@v1.3.0: upstream's
+        # docker image is missing xz-utils, so DSM7 chroot deployment
+        # (which extracts .txz toolchains) fails on every non-noarch build.
+        # See PeterSuh-Q3/synology-package-builder@fix/xz-utils-missing
+        uses: PeterSuh-Q3/synology-package-builder@fix/xz-utils-missing
         with:
           dsm: '7.2'
           arch: 'apollolake'
