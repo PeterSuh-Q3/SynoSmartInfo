@@ -103,8 +103,8 @@ jobs:
         # See PeterSuh-Q3/synology-package-builder@fix/xz-utils-missing
         uses: PeterSuh-Q3/synology-package-builder@fix/xz-utils-missing
         with:
-          dsm: '7.2'
-          arch: 'apollolake'
+          dsm: '7.4'
+          arch: 'epyc7002'
           output: ./dist
 
       - name: Add checksum to INFO
