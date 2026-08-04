@@ -106,16 +106,19 @@ check_sudoers() {
     fi
 }
 
-# setuid 헬퍼가 있으면 우선 사용, 없으면 sudo 로 폴백
+# setuid 헬퍼가 있으면 우선 사용, 없으면 sudo 로 폴백.
+# timeout(1)은 셸 함수를 직접 실행할 수 없으므로(execvp로 바로 찾음),
+# 여기서 실제 실행 파일에 timeout 을 건다 - 호출부에서
+# "timeout N run_smart ..." 처럼 감싸면 "run_smart: No such file"로 깨진다.
 run_smart() {
-    local opt="$1"
+    local secs="$1" opt="$2"
     if [ -u "${HELPER_BIN}" ] && [ -x "${HELPER_BIN}" ]; then
-        "${HELPER_BIN}" "${opt}"
+        timeout "${secs}" "${HELPER_BIN}" "${opt}"
     else
         if [ -n "${opt}" ]; then
-            sudo "${SMART_SCRIPT}" "${opt}"
+            timeout "${secs}" sudo "${SMART_SCRIPT}" "${opt}"
         else
-            sudo "${SMART_SCRIPT}"
+            timeout "${secs}" sudo "${SMART_SCRIPT}"
         fi
     fi
 }
@@ -185,7 +188,7 @@ run)
             TMP_STDERR="${LOG_DIR}/last_smart_stderr.log"
             rm -f "$TMP_RESULT" "$TMP_STDERR"
     
-            timeout 30 run_smart "$OPTION" > "$TMP_RESULT" 2> "$TMP_STDERR"
+            run_smart 30 "$OPTION" > "$TMP_RESULT" 2> "$TMP_STDERR"
             sleep 0.3  # 300ms 정도 대기
             RET=$?
     
@@ -214,7 +217,7 @@ run)
             TMP_STDERR="${LOG_DIR}/last_smart_stderr.log"
             rm -f "$TMP_RESULT" "$TMP_STDERR"
     
-            timeout 240 run_smart "$OPTION" > "$TMP_RESULT" 2> "$TMP_STDERR" &
+            run_smart 240 "$OPTION" > "$TMP_RESULT" 2> "$TMP_STDERR" &
             CMD_PID=$!
     
             i=0
