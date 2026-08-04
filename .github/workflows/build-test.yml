@@ -100,7 +100,7 @@ jobs:
         uses: tomgrv/synology-package-builder@v1.3.0
         with:
           dsm: '7.2'
-          arch: 'noarch'
+          arch: 'apollolake'
           output: ./dist
 
       - name: Remove debug spk
