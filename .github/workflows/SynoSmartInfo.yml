@@ -94,6 +94,14 @@ jobs:
             if ! grep -q "dsmappname" "$tmpdir/INFO"; then
               sed -i "s/dsmuidir=\"ui\"/dsmuidir=\"ui\"\ndsmappname=\"$APPID\"/" "$tmpdir/INFO"
             fi
+            # The builder's create_info() never maps package.json's
+            # ctl_stop/ctl_uninstall to INFO at all (silently dropped).
+            # ctl_stop=no removes Package Center's Start/Stop toggle -
+            # this is a per-request CGI, not a long-running daemon, so
+            # "start/stop" is meaningless; only Open + Uninstall should
+            # remain selectable after install.
+            sed -i '/^ctl_stop=/d' "$tmpdir/INFO"
+            echo 'ctl_stop="no"' >> "$tmpdir/INFO"
             # DSM's Package Center rejects manually-installed spks with
             # "spk is not from synology" (error 289) when INFO has no
             # checksum field. Real Synology-toolkit-built packages always
