@@ -1,11 +1,15 @@
 #!/bin/bash
 
-# SynoSmartInfo start-stop-status (Helper 제거 버전)
-# api-1.cgi에서 직접 sudo syno_smart_info.sh 호출 → 별도 daemon 불필요
+# SynoSmartInfo start-stop-status
+# api.cgi가 setuid 헬퍼(bin/helper/smartinfo-helper.*)를 직접 호출 →
+# 별도 daemon 없음. 이 패키지엔 상시 구동 프로세스가 없으므로
+# start/stop 은 사실상 no-op 이고, status 는 "필요한 산출물이 실제로
+# 제자리에 있는가"만 확인한다.
 
 PKG_NAME="Synosmartinfo"
 PKG_ROOT="/var/packages/$PKG_NAME"
 VAR_DIR="$PKG_ROOT/var"
+HELPER="$PKG_ROOT/target/bin/helper/smartinfo-helper.$(uname -m)"
 
 log_message() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$VAR_DIR/start-stop.log" 2>/dev/null || \
@@ -14,37 +18,33 @@ log_message() {
 
 case "$1" in
   start)
-    log_message "Starting SynoSmartInfo (direct sudo mode)"
-    
-    # api-1.cgi는 DSM webman에서 자동 관리
-    # 별도 daemon 없음 → sudoers만으로 동작
-    
-    # VAR 디렉터리/로그 정리
+    log_message "Starting SynoSmartInfo"
+
+    # api.cgi는 DSM webman이 요청마다 직접 실행 → 별도 daemon 기동 불필요
     mkdir -p "$VAR_DIR" 2>/dev/null || true
     touch "$VAR_DIR/start-stop.log"
     chmod 644 "$VAR_DIR/start-stop.log"
-    
-    log_message "SynoSmartInfo ready (sudo syno_smart_info.sh direct call)"
+
+    log_message "SynoSmartInfo ready"
     exit 0
     ;;
 
   stop)
     log_message "Stopping SynoSmartInfo (no daemon to stop)"
-    
-    # helper 없음 → 정리할 프로세스 없음
-    # VAR 디렉터리만 정리
-    rm -f "$VAR_DIR/helper."* 2>/dev/null || true
-    
-    log_message "SynoSmartInfo stop completed (direct sudo mode)"
     exit 0
     ;;
 
   status)
-    # 별도 프로세스 없음 → 항상 "run" (sudoers만 있으면 사용 가능)
-    if [ -f "/etc/sudoers.d/$PKG_NAME" ]; then
+    # 별도 프로세스 없음 → setuid 헬퍼가 제자리에 있고 setuid 비트가
+    # 걸려 있으면 "run"(정상), 그렇지 않으면만 "stop"(비정상)으로 판정.
+    # (DSM이 conf/privilege의 tool 섹션으로 설치 시점에 자동으로 setuid를
+    # 건다 - 이 스크립트는 그 결과를 확인만 한다.)
+    if [ -u "$HELPER" ]; then
+      log_message "status check OK: helper is setuid ($HELPER)"
       echo "run"
       exit 0
     else
+      log_message "status check FAILED: helper missing or not setuid ($HELPER)"
       echo "stop"
       exit 1
     fi
