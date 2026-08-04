@@ -24,7 +24,9 @@
 
 int main(int argc, char *argv[])
 {
-    const char *allowed[] = { "", "-a", "-i", "-v", "-h", NULL };
+    /* Must match syno_smart_info.sh's actual accepted options exactly;
+     * "-i" was never a real option upstream and always failed. */
+    const char *allowed[] = { "", "-a", "-v", "-h", NULL };
     const char *opt = (argc >= 2) ? argv[1] : "";
 
     if (argc > 2) {

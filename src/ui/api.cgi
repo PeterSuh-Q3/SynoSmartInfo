@@ -184,14 +184,18 @@ run)
                 exit 0
             fi
     
-            TMP_RESULT="${RESULT_FILE}.tmp"
-            TMP_STDERR="${LOG_DIR}/last_smart_stderr.log"
+            # 요청마다 고유한 파일명을 써서, 연속/겹치는 요청 사이에
+            # 같은 임시 파일을 공유하다 생기는 경합을 방지한다.
+            TMP_RESULT="${RESULT_FILE}.tmp.$$"
+            TMP_STDERR="${LOG_DIR}/last_smart_stderr.log.$$"
             rm -f "$TMP_RESULT" "$TMP_STDERR"
     
             run_smart 30 "$OPTION" > "$TMP_RESULT" 2> "$TMP_STDERR"
             sleep 0.3  # 300ms 정도 대기
             RET=$?
     
+            cp -f "$TMP_STDERR" "${LOG_DIR}/last_smart_stderr.log" 2>/dev/null
+
             if [ $RET -eq 0 ] && [ -s "$TMP_RESULT" ]; then
                 mv "$TMP_RESULT" "${RESULT_FILE}"
                 chmod 644 "${RESULT_FILE}"
@@ -204,8 +208,9 @@ run)
                 json_response false "SMART script failed" "$LAST_ERROR" "$SUDOERS_MISSING"
                 log "[ERROR] SMART script failed: $LAST_ERROR"
             fi
+            rm -f "$TMP_RESULT" "$TMP_STDERR"
             ;;
-        ""|"-a"|"-i")
+        ""|"-a")
             # 기존 Finished 대기 루프 방식
             if [ ! -x "${SMART_SCRIPT}" ]; then
                 json_response false "Smart script not found or not executable" ""
@@ -213,8 +218,10 @@ run)
                 exit 0
             fi
     
-            TMP_RESULT="${RESULT_FILE}.tmp"
-            TMP_STDERR="${LOG_DIR}/last_smart_stderr.log"
+            # 요청마다 고유한 파일명을 써서, 연속/겹치는 요청 사이에
+            # 같은 임시 파일을 공유하다 생기는 경합을 방지한다.
+            TMP_RESULT="${RESULT_FILE}.tmp.$$"
+            TMP_STDERR="${LOG_DIR}/last_smart_stderr.log.$$"
             rm -f "$TMP_RESULT" "$TMP_STDERR"
     
             run_smart 240 "$OPTION" > "$TMP_RESULT" 2> "$TMP_STDERR" &
@@ -237,6 +244,8 @@ run)
                 wait $CMD_PID 2>/dev/null
             fi
     
+            cp -f "$TMP_STDERR" "${LOG_DIR}/last_smart_stderr.log" 2>/dev/null
+
             if grep -q "Finished" "$TMP_RESULT" 2>/dev/null; then
                 mv "$TMP_RESULT" "${RESULT_FILE}"
                 chmod 644 "${RESULT_FILE}"
@@ -249,6 +258,7 @@ run)
                 json_response false "SMART scan failed" "$LAST_ERROR" "$SUDOERS_MISSING"
                 log "[ERROR] SMART scan failed: $LAST_ERROR"
             fi
+            rm -f "$TMP_RESULT" "$TMP_STDERR"
             ;;
         *)
             json_response false "Invalid option: ${OPTION}" ""
