@@ -16,6 +16,7 @@ RESULT_DIR="/usr/syno/synoman/webman/3rdparty/${PKG_NAME}/result"
 RESULT_FILE="${RESULT_DIR}/smart.result"
 
 SMART_SCRIPT="${BIN_DIR}/syno_smart_info.sh"
+HELPER_BIN="${BIN_DIR}/smartinfo-helper"
 
 mkdir -p "${LOG_DIR}" "${RESULT_DIR}"
 
@@ -91,12 +92,29 @@ json_response() {
     fi
 }
 
-# 공통 sudoers 체크 함수 (액션 처리 위에 추가)
+# 권한 상승 경로 체크: setuid 헬퍼(우선) 또는 sudoers(레거시 폴백) 중
+# 하나라도 사용 가능하면 false(정상), 둘 다 없으면 true(설정 필요)
 check_sudoers() {
-    if [ ! -f "/etc/sudoers.d/Synosmartinfo" ]; then
-        echo "true"
-    else
+    if [ -u "${HELPER_BIN}" ] && [ -x "${HELPER_BIN}" ]; then
         echo "false"
+    elif [ -f "/etc/sudoers.d/Synosmartinfo" ]; then
+        echo "false"
+    else
+        echo "true"
+    fi
+}
+
+# setuid 헬퍼가 있으면 우선 사용, 없으면 sudo 로 폴백
+run_smart() {
+    local opt="$1"
+    if [ -u "${HELPER_BIN}" ] && [ -x "${HELPER_BIN}" ]; then
+        "${HELPER_BIN}" "${opt}"
+    else
+        if [ -n "${opt}" ]; then
+            sudo "${SMART_SCRIPT}" "${opt}"
+        else
+            sudo "${SMART_SCRIPT}"
+        fi
     fi
 }
 
@@ -165,7 +183,7 @@ run)
             TMP_STDERR="${LOG_DIR}/last_smart_stderr.log"
             rm -f "$TMP_RESULT" "$TMP_STDERR"
     
-            timeout 30 sudo "${SMART_SCRIPT}" "$OPTION" > "$TMP_RESULT" 2> "$TMP_STDERR"
+            timeout 30 run_smart "$OPTION" > "$TMP_RESULT" 2> "$TMP_STDERR"
             sleep 0.3  # 300ms 정도 대기
             RET=$?
     
@@ -194,11 +212,7 @@ run)
             TMP_STDERR="${LOG_DIR}/last_smart_stderr.log"
             rm -f "$TMP_RESULT" "$TMP_STDERR"
     
-            if [ -n "$OPTION" ]; then
-                timeout 240 sudo "${SMART_SCRIPT}" "$OPTION" > "$TMP_RESULT" 2> "$TMP_STDERR" &
-            else
-                timeout 240 sudo "${SMART_SCRIPT}" > "$TMP_RESULT" 2> "$TMP_STDERR" &
-            fi
+            timeout 240 run_smart "$OPTION" > "$TMP_RESULT" 2> "$TMP_STDERR" &
             CMD_PID=$!
     
             i=0
