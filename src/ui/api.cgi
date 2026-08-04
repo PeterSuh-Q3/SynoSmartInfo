@@ -16,7 +16,9 @@ RESULT_DIR="/usr/syno/synoman/webman/3rdparty/${PKG_NAME}/result"
 RESULT_FILE="${RESULT_DIR}/smart.result"
 
 SMART_SCRIPT="${BIN_DIR}/syno_smart_info.sh"
-HELPER_BIN="${BIN_DIR}/smartinfo-helper"
+# DSM applies root-owned setuid (6550) to this exact path at install time,
+# per the "tool" section of conf/privilege. Nothing copies or chmods it.
+HELPER_BIN="${BIN_DIR}/helper/smartinfo-helper.$(uname -m)"
 
 mkdir -p "${LOG_DIR}" "${RESULT_DIR}"
 

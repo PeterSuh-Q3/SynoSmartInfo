@@ -1,13 +1,13 @@
 {
-  "defaults": {
-    "run-as": "package"
-  },
+  "defaults": { "run-as": "package" },
   "username": "sc-synosmartinfo",
   "groupname": "synosmartinfo",
-  "ctrl-script": [
+  "tool": [
     {
-      "action": "postinst",
-      "run-as": "root"
+      "relpath": "bin/helper/smartinfo-helper.x86_64",
+      "user": "root",
+      "group": "package",
+      "permission": "6550"
     }
   ]
 }

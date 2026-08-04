@@ -85,15 +85,16 @@ document.addEventListener('DOMContentLoaded', () => {
             <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:6px; padding:16px; margin-top:12px; font-family:monospace;">
                 <strong style="color:#856404;">⚠️ 권한 설정이 필요합니다 / Permission Setup Required</strong><br><br>
                 <span style="color:#333;">
-                    setuid 헬퍼 설치에 실패했고(미지원 CPU 아키텍처일 수 있음) /etc/sudoers.d/Synosmartinfo 도 없습니다.<br>
-                    <em style="color:#666;">The setuid helper failed to install (possibly an unsupported CPU architecture) and /etc/sudoers.d/Synosmartinfo does not exist either.</em><br><br>
-                    아래는 수동 폴백 방법입니다. SSH로 접속하여 순서대로 실행해주세요.<br>
-                    <em style="color:#666;">Manual fallback: please connect via SSH and run the following commands in order.</em>
+                    setuid 헬퍼가 준비되지 않았습니다. 보통 DSM이 설치 시 자동으로 설정하므로 이 화면은 드물게 나타납니다.<br>
+                    <em style="color:#666;">The setuid helper is not ready. DSM normally sets this up automatically at install time, so this message is rare.</em>
                 </span><br><br>
                 <div style="background:#1e1e1e; color:#d4d4d4; padding:12px; border-radius:4px; line-height:1.8;">
-                    <span style="color:#569cd6;">sudo -i</span><br>
-                    <span style="color:#569cd6;">echo</span> <span style="color:#ce9178;">"synosmartinfo ALL=(ALL) NOPASSWD: ALL"</span> <span style="color:#d4d4d4;">&gt; /etc/sudoers.d/Synosmartinfo</span><br>
-                    <span style="color:#569cd6;">chmod</span> <span style="color:#b5cea8;">0440</span> /etc/sudoers.d/Synosmartinfo
+                    <span style="color:#6a9955;"># 1) 패키지를 재설치하면 대부분 자동으로 해결됩니다.</span><br>
+                    <span style="color:#6a9955;">#    Reinstalling the package usually fixes this automatically.</span><br>
+                    <br>
+                    <span style="color:#6a9955;"># 2) 그래도 안 되면 아래로 수동 설정 / manual fallback:</span><br>
+                    <span style="color:#569cd6;">sudo chown</span> root:package /var/packages/Synosmartinfo/target/bin/helper/smartinfo-helper.x86_64<br>
+                    <span style="color:#569cd6;">sudo chmod</span> <span style="color:#b5cea8;">6550</span> /var/packages/Synosmartinfo/target/bin/helper/smartinfo-helper.x86_64
                 </div>
                 <br>
                 <span style="color:#856404;">

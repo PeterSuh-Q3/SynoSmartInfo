@@ -88,54 +88,44 @@ dbg "VAR_DIR stat: $(stat "$VAR_DIR" 2>&1)"
 inf "STEP 1 done"
 
 # ─────────────────────────────────────────────────────────────────────────
-# STEP 2: setuid 헬퍼 설치 (ARC Control의 spm-exec 패턴)
+# STEP 2: setuid 헬퍼 상태 확인 (설치는 DSM 이 담당)
 #
-# 데몬/CGI는 conf/privilege 의 run-as=package 에 따라 비root 계정
-# (synosmartinfo)으로 동작한다. postinst 는 DSM 설계상 항상 root 로
-# 실행되므로, 이 시점에만 가능한 chown/setuid 부여로 "narrow" 권한
-# 상승 경로를 만든다. sudo/sudoers 패키지 설치 여부에 의존하지 않는다.
+# 이 스크립트는 root 가 아니라 conf/privilege 의 run-as=package 에 따라
+# 비root 서비스 계정(sc-synosmartinfo)으로 실행된다. 서드파티 패키지는
+# privilege 에 run-as=root 를 선언할 수 없다(DSM 이 install 검증 단계에서
+# error 319 로 거부). 따라서 여기서 chown root 는 애초에 불가능하다.
 #
-# 대상 플랫폼은 x86_64뿐이므로 헬퍼는 단일 아키텍처로 빌드된다
-# (src/bin/helper/smartinfo-helper.x86_64). uname -m 매칭 로직은
-# 유지하되 실질적으로 x86_64 한 경로만 사용한다.
+# 대신 conf/privilege 의 "tool" 섹션에 헬퍼를 선언해 두면, DSM 이 설치
+# 시점에 직접 root 소유 + setuid(6550) 로 만들어 준다. 실제 결과:
+#   -r-sr-s--- 1 root <pkggroup> smartinfo-helper.x86_64
+# 6550 이므로 패키지 그룹 구성원만 실행할 수 있다(sudoers 보다 좁다).
+#
+# 즉 이 STEP 은 검증/진단만 하고, 실패해도 설치를 깨뜨리지 않는다.
 # ─────────────────────────────────────────────────────────────────────────
-inf "--- STEP 2: Install setuid helper ---"
+inf "--- STEP 2: Verify setuid helper (installed by DSM via privilege tool) ---"
 
 SMART_SCRIPT="$BIN_DIR/syno_smart_info.sh"
 ARCH="$(uname -m 2>/dev/null)"
-HELPER_SRC="$BIN_DIR/helper/smartinfo-helper.${ARCH}"
-HELPER_DST="$BIN_DIR/smartinfo-helper"
+HELPER="$BIN_DIR/helper/smartinfo-helper.${ARCH}"
 
+dbg "Running as: $(whoami) ($(id))"
 dbg "SMART_SCRIPT path: $SMART_SCRIPT (exists=$([ -f "$SMART_SCRIPT" ] && echo YES || echo NO))"
 dbg "Detected ARCH: $ARCH"
-dbg "HELPER_SRC: $HELPER_SRC (exists=$([ -f "$HELPER_SRC" ] && echo YES || echo NO))"
+dbg "HELPER: $HELPER (exists=$([ -f "$HELPER" ] && echo YES || echo NO))"
 
-# 기존 sudoers 잔재 제거(과거 버전 업그레이드 대비)
+# 과거 버전이 남긴 sudoers 잔재 정리 (root 가 아니면 조용히 실패해도 무방)
 if [ -f "$SUDOERS_FILE" ]; then
-  rm -f "$SUDOERS_FILE" 2>&1
-  dbg "removed legacy sudoers file: $SUDOERS_FILE"
+  rm -f "$SUDOERS_FILE" 2>/dev/null && dbg "removed legacy sudoers file: $SUDOERS_FILE" \
+    || wrn "legacy sudoers file left in place (needs root to remove): $SUDOERS_FILE"
 fi
 
-if [ ! -f "$SMART_SCRIPT" ]; then
-  wrn "SMART script NOT found at install time — skipping helper install"
-elif [ ! -f "$HELPER_SRC" ]; then
-  err "No prebuilt helper binary for arch '$ARCH' ($HELPER_SRC missing)"
-  fail_step "helper binary missing for arch" 1
+if [ ! -f "$HELPER" ]; then
+  wrn "Helper binary not found at $HELPER — SMART features will not work"
+elif [ -u "$HELPER" ]; then
+  inf "Helper is setuid as expected: $(ls -la "$HELPER" 2>&1)"
 else
-  cp -f "$HELPER_SRC" "$HELPER_DST" 2>&1; rc=$?
-  dbg "cp helper rc=$rc"
-  [ $rc -ne 0 ] && fail_step "cp helper" $rc
-
-  chown root:root "$HELPER_DST" 2>&1; rc=$?
-  dbg "chown root:root helper rc=$rc"
-  [ $rc -ne 0 ] && fail_step "chown helper" $rc
-
-  chmod 6755 "$HELPER_DST" 2>&1; rc=$?
-  dbg "chmod 6755 helper rc=$rc"
-  [ $rc -ne 0 ] && fail_step "chmod helper" $rc
-
-  dbg "helper stat: $(stat "$HELPER_DST" 2>&1)"
-  inf "setuid helper installed at $HELPER_DST"
+  wrn "Helper exists but is NOT setuid — check conf/privilege 'tool' section"
+  wrn "Current state: $(ls -la "$HELPER" 2>&1)"
 fi
 inf "STEP 2 done"
 
