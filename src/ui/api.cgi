@@ -33,10 +33,25 @@ log() {
 # --------- 3. HTTP 헤더 출력 ----------------------------------------
 
 echo "Content-Type: application/json; charset=utf-8"
-echo "Access-Control-Allow-Origin: *"
-echo "Access-Control-Allow-Methods: GET, POST"
-echo "Access-Control-Allow-Headers: Content-Type"
 echo "" # 헤더/바디 구분 빈줄
+
+# --------- DSM 세션 인증 -----------------------------------------------
+#
+# 다른 걸 하기 전에 반드시 먼저 체크해야 한다. DSM은 webman/3rdparty/
+# 아래 서드파티 CGI를 대신 인증해주지 않는다 - 패키지 자신의 책임이다.
+# 실기기(DSM 7.4.1/SA6400)로 확인: 이 검사가 없으면 같은 네트워크의
+# 다른 머신에서 인증 없이 curl만으로 SMART 데이터(디스크 시리얼 포함)를
+# 그대로 읽어갈 수 있었다 (MSHELL Manager에서 동일 패턴의 취약점을
+# 먼저 발견·수정하며 확인).
+#
+# authenticate.cgi는 로그인된 DSM 사용자명을 출력하고, 세션이 없으면
+# 아무것도 출력하지 않는다.
+AUTH_USER="$(/usr/syno/synoman/webman/modules/authenticate.cgi 2>/dev/null)"
+if [ -z "${AUTH_USER}" ]; then
+    log "[SECURITY] rejected unauthenticated request from ${REMOTE_ADDR:-unknown}"
+    echo '{"success":false,"message":"unauthorized - sign in to DSM first","result":null}'
+    exit 0
+fi
 
 # --------- 4. URL-encoded 파라미터 파싱 ------------------------------
 
