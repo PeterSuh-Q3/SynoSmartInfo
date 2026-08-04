@@ -94,6 +94,13 @@ jobs:
             if ! grep -q "dsmappname" "$tmpdir/INFO"; then
               sed -i "s/dsmuidir=\"ui\"/dsmuidir=\"ui\"\ndsmappname=\"$APPID\"/" "$tmpdir/INFO"
             fi
+            # DSM's Package Center rejects manually-installed spks with
+            # "spk is not from synology" (error 289) when INFO has no
+            # checksum field. Real Synology-toolkit-built packages always
+            # carry checksum=md5(package.tgz); compute and (re)write it.
+            sed -i '/^checksum=/d' "$tmpdir/INFO"
+            CHECKSUM=$(md5sum "$tmpdir/package.tgz" | awk '{print $1}')
+            echo "checksum=\"$CHECKSUM\"" >> "$tmpdir/INFO"
             tar -cf "$f" -C "$tmpdir" $(ls "$tmpdir")
             rm -rf "$tmpdir"
           done
