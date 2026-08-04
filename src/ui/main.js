@@ -85,10 +85,10 @@ document.addEventListener('DOMContentLoaded', () => {
             <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:6px; padding:16px; margin-top:12px; font-family:monospace;">
                 <strong style="color:#856404;">⚠️ 권한 설정이 필요합니다 / Permission Setup Required</strong><br><br>
                 <span style="color:#333;">
-                    /etc/sudoers.d/Synosmartinfo 파일이 존재하지 않습니다.<br>
-                    <em style="color:#666;">The /etc/sudoers.d/Synosmartinfo file does not exist.</em><br><br>
-                    SSH로 접속하여 아래 명령어를 순서대로 실행해주세요.<br>
-                    <em style="color:#666;">Please connect via SSH and run the following commands in order.</em>
+                    setuid 헬퍼 설치에 실패했고(미지원 CPU 아키텍처일 수 있음) /etc/sudoers.d/Synosmartinfo 도 없습니다.<br>
+                    <em style="color:#666;">The setuid helper failed to install (possibly an unsupported CPU architecture) and /etc/sudoers.d/Synosmartinfo does not exist either.</em><br><br>
+                    아래는 수동 폴백 방법입니다. SSH로 접속하여 순서대로 실행해주세요.<br>
+                    <em style="color:#666;">Manual fallback: please connect via SSH and run the following commands in order.</em>
                 </span><br><br>
                 <div style="background:#1e1e1e; color:#d4d4d4; padding:12px; border-radius:4px; line-height:1.8;">
                     <span style="color:#569cd6;">sudo -i</span><br>

@@ -43,7 +43,7 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        arch: ['noarch']
+        arch: ['x86_64']
         dsm: ['7.2']
     steps:
       - name: Checkout
@@ -63,6 +63,15 @@ jobs:
           echo "commit=$COMMIT" >> $GITHUB_OUTPUT
           curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh \
             -o ./src/bin/syno_smart_info.sh
+
+      - name: Build setuid helper binary (x86_64, static)
+        run: |
+          set -eux
+          mkdir -p ./src/bin/helper
+          SRC=./synology/helper/smartinfo-helper.c
+          gcc -O2 -static -Wall -o ./src/bin/helper/smartinfo-helper.x86_64 "$SRC"
+          chmod 0755 ./src/bin/helper/smartinfo-helper.x86_64
+          ls -la ./src/bin/helper
 
       - name: Synology Package Builder Github Action
         uses: tomgrv/synology-package-builder@v1.3.0

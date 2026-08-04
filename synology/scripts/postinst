@@ -88,78 +88,54 @@ dbg "VAR_DIR stat: $(stat "$VAR_DIR" 2>&1)"
 inf "STEP 1 done"
 
 # ─────────────────────────────────────────────────────────────────────────
-# STEP 2: sudoers 설정
+# STEP 2: setuid 헬퍼 설치 (ARC Control의 spm-exec 패턴)
+#
+# 데몬/CGI는 conf/privilege 의 run-as=package 에 따라 비root 계정
+# (synosmartinfo)으로 동작한다. postinst 는 DSM 설계상 항상 root 로
+# 실행되므로, 이 시점에만 가능한 chown/setuid 부여로 "narrow" 권한
+# 상승 경로를 만든다. sudo/sudoers 패키지 설치 여부에 의존하지 않는다.
+#
+# 대상 플랫폼은 x86_64뿐이므로 헬퍼는 단일 아키텍처로 빌드된다
+# (src/bin/helper/smartinfo-helper.x86_64). uname -m 매칭 로직은
+# 유지하되 실질적으로 x86_64 한 경로만 사용한다.
 # ─────────────────────────────────────────────────────────────────────────
-inf "--- STEP 2: Configure sudoers ---"
+inf "--- STEP 2: Install setuid helper ---"
 
 SMART_SCRIPT="$BIN_DIR/syno_smart_info.sh"
-dbg "SMART_SCRIPT path: $SMART_SCRIPT"
-dbg "SMART_SCRIPT exists: $([ -f "$SMART_SCRIPT" ] && echo YES || echo NO)"
+ARCH="$(uname -m 2>/dev/null)"
+HELPER_SRC="$BIN_DIR/helper/smartinfo-helper.${ARCH}"
+HELPER_DST="$BIN_DIR/smartinfo-helper"
 
-if [ -f "$SMART_SCRIPT" ]; then
-  SUDOERS_LINE="synosmartinfo ALL=(root) NOPASSWD: $SMART_SCRIPT"
-  inf "SMART script found → sudoers line set"
-else
-  SUDOERS_LINE="# SMART_SCRIPT not found at install time: $SMART_SCRIPT"
-  wrn "SMART script NOT found → placeholder comment in sudoers"
+dbg "SMART_SCRIPT path: $SMART_SCRIPT (exists=$([ -f "$SMART_SCRIPT" ] && echo YES || echo NO))"
+dbg "Detected ARCH: $ARCH"
+dbg "HELPER_SRC: $HELPER_SRC (exists=$([ -f "$HELPER_SRC" ] && echo YES || echo NO))"
+
+# 기존 sudoers 잔재 제거(과거 버전 업그레이드 대비)
+if [ -f "$SUDOERS_FILE" ]; then
+  rm -f "$SUDOERS_FILE" 2>&1
+  dbg "removed legacy sudoers file: $SUDOERS_FILE"
 fi
 
-dbg "SUDOERS_LINE: $SUDOERS_LINE"
-dbg "SUDOERS_FILE: $SUDOERS_FILE"
-dbg "SUDOERS_TMP : ${SUDOERS_FILE}.tmp"
-
-# sudoers.d 존재 확인
-if [ ! -d "/etc/sudoers.d" ]; then
-  err "/etc/sudoers.d missing — cannot create sudoers"
-  fail_step "sudoers.d check" 1
+if [ ! -f "$SMART_SCRIPT" ]; then
+  wrn "SMART script NOT found at install time — skipping helper install"
+elif [ ! -f "$HELPER_SRC" ]; then
+  err "No prebuilt helper binary for arch '$ARCH' ($HELPER_SRC missing)"
+  fail_step "helper binary missing for arch" 1
 else
-  dbg "/etc/sudoers.d stat: $(ls -la /etc/sudoers.d 2>&1)"
+  cp -f "$HELPER_SRC" "$HELPER_DST" 2>&1; rc=$?
+  dbg "cp helper rc=$rc"
+  [ $rc -ne 0 ] && fail_step "cp helper" $rc
 
-  # 기존 백업
-  if [ -f "$SUDOERS_FILE" ]; then
-    BACKUP="${SUDOERS_FILE}.backup.$(date +%s)"
-    mv "$SUDOERS_FILE" "$BACKUP" 2>&1; rc=$?
-    dbg "backup mv rc=$rc → $BACKUP"
-  fi
+  chown root:root "$HELPER_DST" 2>&1; rc=$?
+  dbg "chown root:root helper rc=$rc"
+  [ $rc -ne 0 ] && fail_step "chown helper" $rc
 
-  # tmp 파일 생성 (printf 사용, heredoc 회피)
-  SUDOERS_TMP="${SUDOERS_FILE}.tmp"
-  dbg "Writing tmp file: $SUDOERS_TMP"
+  chmod 6755 "$HELPER_DST" 2>&1; rc=$?
+  dbg "chmod 6755 helper rc=$rc"
+  [ $rc -ne 0 ] && fail_step "chmod helper" $rc
 
-  printf '%s\n' \
-    "#" \
-    "# SynoSmartInfo - Narrow sudoers (auto-generated)" \
-    "# Generated: $(date '+%Y-%m-%d %H:%M:%S')" \
-    "# Purpose: Allow SMART script execution only" \
-    "#" \
-    "$SUDOERS_LINE" \
-    > "$SUDOERS_TMP" 2>&1
-  rc=$?
-  dbg "printf to tmp rc=$rc"
-
-  if [ $rc -ne 0 ] || [ ! -f "$SUDOERS_TMP" ]; then
-    err "Failed to write SUDOERS_TMP (rc=$rc, exists=$([ -f "$SUDOERS_TMP" ] && echo YES || echo NO))"
-    fail_step "write sudoers.tmp" $rc
-  else
-    dbg "SUDOERS_TMP content:"
-    cat "$SUDOERS_TMP" >&2
-
-    mv "$SUDOERS_TMP" "$SUDOERS_FILE" 2>&1; rc=$?
-    dbg "mv tmp→sudoers rc=$rc"
-    [ $rc -ne 0 ] && fail_step "mv sudoers.tmp" $rc
-
-    chmod 0440 "$SUDOERS_FILE" 2>&1; rc=$?
-    dbg "chmod 0440 sudoers rc=$rc"
-
-    chown root:root "$SUDOERS_FILE" 2>&1; rc=$?
-    dbg "chown root:root sudoers rc=$rc"
-
-    if visudo -cf "$SUDOERS_FILE" 2>&1; then
-      inf "visudo syntax OK"
-    else
-      wrn "visudo syntax check FAILED (non-fatal)"
-    fi
-  fi
+  dbg "helper stat: $(stat "$HELPER_DST" 2>&1)"
+  inf "setuid helper installed at $HELPER_DST"
 fi
 inf "STEP 2 done"
 
