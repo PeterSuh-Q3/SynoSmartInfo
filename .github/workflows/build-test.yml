@@ -107,12 +107,24 @@ jobs:
           arch: 'epyc7002'
           output: ./dist
 
-      - name: Add checksum to INFO
+      - name: Add dsmappname + checksum to INFO
         run: |
           for f in ./dist/*.spk; do
             [[ "$f" == *_debug.spk ]] && continue
             tmpdir=$(mktemp -d)
             tar -xf "$f" -C "$tmpdir"
+            # Without dsmappname, DSM never registers the desktop app
+            # entry that src/ui/config declares - the package installs
+            # fine but no icon/popup window ever appears. This step
+            # existed in SynoSmartInfo.yml (the release workflow) but
+            # was missing here, so every test build this session never
+            # actually had a working popup, even though the underlying
+            # mechanism (dsmuidir + dsmappname + ui/config's .url entry)
+            # was already correct.
+            APPID=$(jq -r '.[] | keys[]' src/ui/config)
+            if ! grep -q "dsmappname" "$tmpdir/INFO"; then
+              sed -i "s/dsmuidir=\"ui\"/dsmuidir=\"ui\"\ndsmappname=\"$APPID\"/" "$tmpdir/INFO"
+            fi
             # The builder's create_info() never maps package.json's
             # ctl_stop/ctl_uninstall to INFO at all (silently dropped).
             # ctl_stop=no removes Package Center's Start/Stop toggle -
