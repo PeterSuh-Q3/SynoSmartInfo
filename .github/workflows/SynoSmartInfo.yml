@@ -35,9 +35,72 @@ jobs:
           new_tag="v${major}.${minor}.${patch}"
           echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
 
+  test-helper:
+    name: Compile & functional-test setuid helper
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compile production helper (real target path)
+        run: |
+          set -eux
+          mkdir -p /tmp/build
+          gcc -O2 -static -Wall -Wextra -o /tmp/build/smartinfo-helper.x86_64 \
+            synology/helper/smartinfo-helper.c
+          file /tmp/build/smartinfo-helper.x86_64
+
+      - name: Compile test helper (target overridden to /usr/bin/id)
+        run: |
+          set -eux
+          gcc -O2 -Wall -Wextra -DTARGET_SCRIPT='"/usr/bin/id"' \
+            -o /tmp/build/smartinfo-helper-test synology/helper/smartinfo-helper.c
+
+      - name: Install setuid bit on test helper (root, same as postinst does)
+        run: |
+          set -eux
+          sudo chown root:root /tmp/build/smartinfo-helper-test
+          sudo chmod 6755 /tmp/build/smartinfo-helper-test
+          ls -la /tmp/build/smartinfo-helper-test
+
+      - name: Ensure an unprivileged test user exists
+        run: |
+          id nobody || sudo useradd -M -s /usr/sbin/nologin nobody
+
+      - name: Reject unknown option (must NOT execute target, exit != 0)
+        run: |
+          set -eux
+          if sudo -u nobody /tmp/build/smartinfo-helper-test "--evil" ; then
+            echo "FAIL: helper accepted a disallowed option"; exit 1
+          fi
+          echo "OK: disallowed option rejected"
+
+      - name: Reject too many arguments
+        run: |
+          set -eux
+          if sudo -u nobody /tmp/build/smartinfo-helper-test "-a" "extra" ; then
+            echo "FAIL: helper accepted extra arguments"; exit 1
+          fi
+          echo "OK: extra arguments rejected"
+
+      - name: Accept whitelisted option and verify REAL privilege escalation
+        run: |
+          set -eux
+          OUT="$(sudo -u nobody /tmp/build/smartinfo-helper-test -a)"
+          echo "$OUT"
+          echo "$OUT" | grep -q 'uid=0(root)' || { echo "FAIL: target did not run as root"; exit 1; }
+          echo "OK: whitelisted option escalates caller (nobody) to root"
+
+      - name: Accept empty option
+        run: |
+          set -eux
+          OUT="$(sudo -u nobody /tmp/build/smartinfo-helper-test)"
+          echo "$OUT"
+          echo "$OUT" | grep -q 'uid=0(root)' || { echo "FAIL: empty-option run did not escalate"; exit 1; }
+
   build-spk:
     name: Build Package ${{ github.event.inputs.use_cache || 'default' }}
-    needs: prepare
+    needs: [prepare, test-helper]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
