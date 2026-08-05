@@ -70,6 +70,8 @@ chicken-and-egg problem of "postinst needs root to grant root" disappears too.
 
 <img width="1257" height="612" alt="스크린샷 2025-10-25 오전 12 17 34" src="https://github.com/user-attachments/assets/1bc92481-41f8-47dd-8bcb-1d876a0b1677" />
 
+<img width="1462" height="892" alt="dsm-floating-window" src="https://github.com/user-attachments/assets/85ba9334-1d73-499b-962c-c5ad11bf1919" />
+
 <img width="640" height="986" alt="introducing-synology-custom-package-syno-smart-info-v0-44mjssa6x5hf1" src="https://github.com/user-attachments/assets/b1da273e-8118-4219-8148-795861aa7a9c" />
 
 <img width="1080" height="982" alt="introducing-synology-custom-package-syno-smart-info-v0-owm8qcbww5hf1" src="https://github.com/user-attachments/assets/cbcb34e9-a359-48fc-ac37-7dd2a2f2c2f3" />
