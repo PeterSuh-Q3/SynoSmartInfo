@@ -1,9 +1,17 @@
-name: Build n Release Synology Smart Info Package (Cache-Controlled)
+name: Build n Release Synology Smart Info Package
 on:
   workflow_dispatch:
     inputs:
-      use_cache:
-        description: 'Use cache? (true/false)'
+      # Formerly "use_cache", which was misleading: it never controlled
+      # the toolchain cache at all. The cache is handled unconditionally
+      # by the package-builder action (actions/cache on
+      # .toolkit/{pkgscripts-ng,toolkit_tarballs}, keyed
+      # toolkit-<dsm>-<arch>) and can't be turned off from here. What
+      # this flag actually gates is whether a GitHub release gets
+      # published - so name it for that. Use build-test.yml if you just
+      # want an artifact with no release.
+      publish_release:
+        description: 'Publish a GitHub release? (true/false)'
         required: true
         default: 'true'
         type: choice
@@ -99,7 +107,7 @@ jobs:
           echo "$OUT" | grep -q 'uid=0(root)' || { echo "FAIL: empty-option run did not escalate"; exit 1; }
 
   build-spk:
-    name: Build Package ${{ github.event.inputs.use_cache || 'default' }}
+    name: Build Package
     needs: [prepare, test-helper]
     runs-on: ubuntu-latest
     strategy:
@@ -209,16 +217,15 @@ jobs:
       - name: Upload Package
         uses: actions/upload-artifact@v4
         with:
-          name: SynoSmartInfo-${{ matrix.dsm }}-${{ github.event.inputs.use_cache || 'cached' }}
+          name: SynoSmartInfo-${{ matrix.dsm }}
           path: ./dist/*.spk
 
-      # ---------------------------------------------------------------
-      # [FIX 2] workflow_dispatch 실행 시 github.ref_type은 항상 'branch'이므로
-      #         'tag' 조건을 제거하고, use_cache == 'false'일 때만 릴리즈 제외
-      #         (강제 재빌드=캐시 무시 시에는 테스트 목적으로 간주하여 릴리즈 스킵)
-      # ---------------------------------------------------------------
+      # workflow_dispatch always reports github.ref_type as 'branch', so
+      # a 'tag' condition here would never match - gate on the input
+      # instead. Defaults to publishing, including for daily_check.yml's
+      # unattended trigger (which passes no inputs at all).
       - name: Release
-        if: github.event.inputs.use_cache != 'false'
+        if: github.event.inputs.publish_release != 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.new_tag }}
