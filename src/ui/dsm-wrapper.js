@@ -1,11 +1,11 @@
-// DSM desktop app registration (floating window, ARC Control-style).
+// DSM desktop app registration (floating window).
 //
 // This is what actually produces a resizable/maximizable window on the
 // DSM desktop instead of navigating to a bare URL - the previous
-// "ui/config" alone (a `.url`-type entry) was not sufficient. Modeled
-// directly on AuxXxilium/arc-control's dsm-wrapper.js: DSM's app loader
-// resolves `dsmappname` in INFO to an Ext.define'd class here, keyed by
-// this exact file name in `ui/config`'s "dsm-wrapper.js" section.
+// "ui/config" alone (a `.url`-type entry) was not sufficient. DSM's app
+// loader resolves `dsmappname` in INFO to an Ext.define'd class here,
+// keyed by this exact file name in `ui/config`'s "dsm-wrapper.js"
+// section.
 Ext.ns('PeterSuh.SynoSmartInfo');
 
 Ext.define('PeterSuh.SynoSmartInfo.AppInstance', {
