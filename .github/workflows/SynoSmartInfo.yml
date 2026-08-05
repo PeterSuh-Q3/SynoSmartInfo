@@ -57,12 +57,34 @@ jobs:
       - name: Get latest syno_smart_info.sh and capture upstream commit hash
         id: get_script
         run: |
-          COMMIT=$(curl -s https://api.github.com/repos/007revad/Synology_SMART_info/commits/main \
+          set -euo pipefail
+          COMMIT=$(curl -sf https://api.github.com/repos/007revad/Synology_SMART_info/commits/main \
             | jq -r .sha | cut -c1-8)
           echo "Upstream commit: $COMMIT"
           echo "commit=$COMMIT" >> $GITHUB_OUTPUT
-          curl -kL https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/syno_smart_info.sh \
+
+          LATEST_TAG=$(curl -sf https://api.github.com/repos/007revad/Synology_SMART_info/releases/latest | jq -r .tag_name)
+          echo "Upstream latest release tag: $LATEST_TAG"
+
+          # A bare `curl -o` with no failure/content check was the actual
+          # cause of v2.0.2 shipping a script from 2026-02 (v1.3.16):
+          # when the download silently failed, the step kept going with
+          # whatever was already checked out in git (a stale committed
+          # copy), and nothing downstream noticed or failed the build.
+          # --fail makes curl itself exit non-zero on a 4xx/5xx instead
+          # of writing the error page as if it were the script; the
+          # scriptver grep additionally guards against a 200 response
+          # with unexpected/empty content.
+          curl -sf --retry 5 --retry-delay 3 -kL \
+            "https://raw.githubusercontent.com/007revad/Synology_SMART_info/${LATEST_TAG}/syno_smart_info.sh" \
             -o ./src/bin/syno_smart_info.sh
+
+          DOWNLOADED_VER=$(grep -m1 '^scriptver=' ./src/bin/syno_smart_info.sh | tr -d '"' | cut -d= -f2)
+          echo "Downloaded script version: ${DOWNLOADED_VER:-<none found>}"
+          if [ "${DOWNLOADED_VER}" != "${LATEST_TAG}" ]; then
+            echo "::error::Downloaded syno_smart_info.sh reports version '${DOWNLOADED_VER}', expected '${LATEST_TAG}' - refusing to build with a mismatched/stale script."
+            exit 1
+          fi
 
       - name: Build setuid helper binary (x86_64, static)
         run: |
