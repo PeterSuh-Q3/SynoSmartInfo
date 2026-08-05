@@ -137,5 +137,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.new_tag }}
+          # Without this, unattended runs (daily_check.yml's scheduled
+          # trigger) publish a release with an empty body - noticed when
+          # v2.0.2 came out of this workflow with no notes at all.
+          # Auto-generated notes (commit log since the last tag) are a
+          # reasonable default for scheduled releases; hand-written notes
+          # for anything noteworthy can still replace them afterward.
+          generate_release_notes: true
           files: |
             ./dist/*.spk
