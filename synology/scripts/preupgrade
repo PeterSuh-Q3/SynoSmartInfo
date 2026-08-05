@@ -1,0 +1,9 @@
+#!/bin/sh
+# DSM requires preupgrade/postupgrade to exist for an upgrade install
+# to proceed at all - without them it fails outright with error 261
+# ("package does not have preupgrade / postupgrade script"), which
+# Package Center surfaces to the user as a generic "invalid file
+# format" message. This package has no persistent state that could
+# conflict across versions, so the same checks preinst already does
+# (none of which are hard blockers) are sufficient here too.
+exec "$(dirname "$0")/preinst" "$@"
