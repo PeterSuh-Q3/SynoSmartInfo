@@ -43,26 +43,53 @@ jobs:
 
       - name: Compare versions and trigger SynoSmartInfo.yml if different
         run: |
-          if [ "${{ steps.get_tag.outputs.latest_tag }}" != "${{ steps.get_scriptversion.outputs.current_version }}" ]; then
-            echo "Update scriptversion in script.json,package.json"
-            jq --arg tag "${{ steps.get_tag.outputs.latest_tag }}" '.scriptversion = $tag' script.json > tmp.json && mv tmp.json script.json    
-            jq --arg newtag "${{ steps.get_latest_tag.outputs.new_tag }}" '.version = ($newtag | sub("^v"; ""))' package.json > tmp.json && mv tmp.json package.json            
-            echo "Commit updated package.json"
-            git config --global user.name "github-actions"
-            git config --global user.email "github-actions@github.com"
-            git add script.json
-            git add package.json
-            if ! git diff --cached --quiet; then
-              git commit -m "Update scriptversion to ${{ steps.get_tag.outputs.latest_tag }}"
-              git push
-            else
-              echo "No changes to commit."
-            fi
-            echo "Version mismatch detected. Triggering SynoSmartInfo.yml workflow..."
-            gh workflow run SynoSmartInfo.yml
-          else
-            echo "Versions match. No action needed."
+          set -euo pipefail
+          LATEST_TAG="${{ steps.get_tag.outputs.latest_tag }}"
+          CURRENT_VER="${{ steps.get_scriptversion.outputs.current_version }}"
+
+          if [ "${LATEST_TAG}" = "${CURRENT_VER}" ]; then
+            echo "Versions match (${CURRENT_VER}). No action needed."
+            exit 0
           fi
+
+          echo "Upstream ${LATEST_TAG} != ours ${CURRENT_VER} - updating."
+
+          # Pull the actual script, not just the version string.
+          #
+          # This workflow used to bump script.json/package.json only, on
+          # the assumption that SynoSmartInfo.yml would fetch the real
+          # file at build time. That fetch had no failure check, so when
+          # it silently failed the build shipped whatever stale copy was
+          # committed here - which is exactly how v2.0.2 went out with
+          # v1.3.16 while script.json claimed v1.4.38. Fetch it here,
+          # verify it, and commit it alongside the version bump so the
+          # repo state is self-consistent and reviewable.
+          curl -sf --retry 5 --retry-delay 3 -L \
+            "https://raw.githubusercontent.com/007revad/Synology_SMART_info/${LATEST_TAG}/syno_smart_info.sh" \
+            -o ./src/bin/syno_smart_info.sh
+
+          DOWNLOADED_VER=$(grep -m1 '^scriptver=' ./src/bin/syno_smart_info.sh | tr -d '"' | cut -d= -f2)
+          if [ "${DOWNLOADED_VER}" != "${LATEST_TAG}" ]; then
+            echo "::error::Downloaded syno_smart_info.sh reports '${DOWNLOADED_VER}', expected '${LATEST_TAG}' - aborting."
+            exit 1
+          fi
+          echo "Downloaded and verified syno_smart_info.sh ${DOWNLOADED_VER}"
+
+          jq --arg tag "${LATEST_TAG}" '.scriptversion = $tag' script.json > tmp.json && mv tmp.json script.json
+          jq --arg newtag "${{ steps.get_latest_tag.outputs.new_tag }}" '.version = ($newtag | sub("^v"; ""))' package.json > tmp.json && mv tmp.json package.json
+
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add script.json package.json src/bin/syno_smart_info.sh
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update syno_smart_info.sh to ${LATEST_TAG}"
+            git push
+          fi
+
+          echo "Triggering SynoSmartInfo.yml workflow..."
+          gh workflow run SynoSmartInfo.yml
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
