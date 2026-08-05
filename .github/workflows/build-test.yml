@@ -88,71 +88,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build setuid helper binary (x86_64, static)
+      # No Synology toolchain, no chroot, no Docker: nothing in this
+      # package is compiled against Synology's toolchain (the only
+      # native code is the setuid helper, built as a plain static
+      # binary), and an .spk is just a tar. See build-spk.sh's header
+      # comment. This also retires the "Add dsmappname + checksum to
+      # INFO" sed-patch step that used to live here: build-spk.sh reads
+      # dsmappname/ctl_stop/checksum straight from package.json/the
+      # built package.tgz, so there's nothing left for the toolchain
+      # builder's incomplete INFO generation to need patching around.
+      - name: Build SPK
+        run: ./build-spk.sh ./dist
+
+      - name: Verify the built package
         run: |
           set -eux
-          mkdir -p ./src/bin/helper
-          gcc -O2 -static -Wall -o ./src/bin/helper/smartinfo-helper.x86_64 \
-            ./synology/helper/smartinfo-helper.c
-          chmod 0755 ./src/bin/helper/smartinfo-helper.x86_64
+          spk=$(ls ./dist/*.spk)
+          workdir=$(mktemp -d)
+          tar -xf "$spk" -C "$workdir"
 
-      - name: Synology Package Builder Github Action
-        # Forked from tomgrv/synology-package-builder@v1.3.0: upstream's
-        # docker image is missing xz-utils, so DSM7 chroot deployment
-        # (which extracts .txz toolchains) fails on every non-noarch build.
-        # See PeterSuh-Q3/synology-package-builder@fix/xz-utils-missing
-        uses: PeterSuh-Q3/synology-package-builder@fix/xz-utils-missing
-        with:
-          dsm: '7.4'
-          arch: 'epyc7002'
-          output: ./dist
+          # INFO's checksum must match package.tgz, or DSM rejects the
+          # package outright with "spk is not from synology" (error 289).
+          declared=$(grep '^checksum=' "$workdir/INFO" | cut -d'"' -f2)
+          actual=$(md5sum "$workdir/package.tgz" | awk '{print $1}')
+          [ "$declared" = "$actual" ]
 
-      - name: Add dsmappname + checksum to INFO
-        run: |
-          for f in ./dist/*.spk; do
-            [[ "$f" == *_debug.spk ]] && continue
-            tmpdir=$(mktemp -d)
-            tar -xf "$f" -C "$tmpdir"
-            # Without dsmappname, DSM never registers the desktop app
-            # entry that src/ui/config declares - the package installs
-            # fine but no icon/popup window ever appears. This step
-            # existed in SynoSmartInfo.yml (the release workflow) but
-            # was missing here, so every test build this session never
-            # actually had a working popup, even though the underlying
-            # mechanism (dsmuidir + dsmappname + ui/config's .url entry)
-            # was already correct.
-            # ui/config now uses the "dsm-wrapper.js" schema (floating
-            # desktop window via SYNO.SDS.AppWindow, not a bare .url tab -
-            # see dsm-wrapper.js's header comment), which nests two
-            # classes (AppInstance, AppWindow) - dsmappname must be the
-            # AppInstance one specifically.
-            APPID=$(jq -r '.["dsm-wrapper.js"] | to_entries[] | select(.value.type=="app") | .key' src/ui/config)
-            if ! grep -q "dsmappname" "$tmpdir/INFO"; then
-              sed -i "s/dsmuidir=\"ui\"/dsmuidir=\"ui\"\ndsmappname=\"$APPID\"/" "$tmpdir/INFO"
-            fi
-            # The builder's create_info() never maps package.json's
-            # ctl_stop/ctl_uninstall to INFO at all (silently dropped).
-            # ctl_stop=no removes Package Center's Start/Stop toggle -
-            # this is a per-request CGI, not a long-running daemon, so
-            # "start/stop" is meaningless; only Open + Uninstall should
-            # remain selectable after install.
-            sed -i '/^ctl_stop=/d' "$tmpdir/INFO"
-            echo 'ctl_stop="no"' >> "$tmpdir/INFO"
-            # DSM's Package Center rejects manually-installed spks with
-            # "spk is not from synology" (error 289) when INFO has no
-            # checksum field. Real Synology-toolkit-built packages always
-            # carry checksum=md5(package.tgz); compute and (re)write it.
-            sed -i '/^checksum=/d' "$tmpdir/INFO"
-            CHECKSUM=$(md5sum "$tmpdir/package.tgz" | awk '{print $1}')
-            echo "checksum=\"$CHECKSUM\"" >> "$tmpdir/INFO"
-            tar -cf "$f" -C "$tmpdir" $(ls "$tmpdir")
-            rm -rf "$tmpdir"
-          done
+          # dsmappname must be present, or DSM never registers the
+          # desktop app entry src/ui/config declares - the package
+          # installs fine but no icon/popup window ever appears.
+          grep -q '^dsmappname="PeterSuh.SynoSmartInfo.AppInstance"$' "$workdir/INFO"
 
-      - name: Remove debug spk
-        run: |
-          ls -l ./dist
-          rm -f ./dist/*_debug.spk
+          # A missing/non-setuid helper means no privileged path at all,
+          # and privilege's "tool" section is what makes DSM apply the
+          # setuid bit at install time - so both must be present.
+          tar -tzf "$workdir/package.tgz" | grep -q 'bin/helper/smartinfo-helper'
+          grep -q '"tool"' "$workdir/conf/privilege"
+
+          # Third-party packages cannot declare run-as root anywhere in
+          # privilege (DSM rejects with error 319 at verify time).
+          ! grep -q '"run-as": *"root"' "$workdir/conf/privilege"
+
+          file "$workdir/package.tgz"
+          cat "$workdir/INFO"
 
       - name: Upload built SPK as artifact
         uses: actions/upload-artifact@v4
