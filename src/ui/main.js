@@ -23,16 +23,41 @@ document.addEventListener('DOMContentLoaded', () => {
         return info;
     }
 
-    // API 호출 함수 (기존과 동일)
+    // DSM CSRF 토큰(SynoToken).
+    //
+    // DSM에서 enable_syno_token=yes 이면 세션 쿠키만으로는 인증이 통과하지
+    // 않는다 - authenticate.cgi 가 X-SYNO-TOKEN 헤더까지 요구한다.
+    // 실기기(DSM 7.4.1)로 확인: 같은 세션 쿠키로 토큰 없이 호출하면 rc=7에
+    // 빈 출력(=미인증 취급), 토큰을 붙이면 rc=0에 사용자명이 나온다.
+    // 현재 세션의 토큰은 login.cgi 를 GET 하면 받을 수 있다.
+    let synoTokenPromise = null;
+    function getSynoToken() {
+        if (!synoTokenPromise) {
+            synoTokenPromise = fetch('/webman/login.cgi', { credentials: 'same-origin' })
+                .then(res => res.json())
+                .then(data => data.SynoToken || '')
+                // 토큰을 못 받아도(=해당 설정이 꺼진 DSM) 요청 자체는 계속 진행
+                .catch(() => '');
+        }
+        return synoTokenPromise;
+    }
+
+    // API 호출 함수
     function callAPI(action, params = {}) {
         const urlParams = new URLSearchParams();
         urlParams.append('action', action);
         Object.keys(params).forEach(key => urlParams.append(key, params[key]));
 
-        return fetch('api.cgi', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: urlParams.toString()
+        return getSynoToken().then(token => {
+            const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+            if (token) headers['X-SYNO-TOKEN'] = token;
+
+            return fetch('api.cgi', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: headers,
+                body: urlParams.toString()
+            });
         })
         .then(res => {
             if (!res.ok) throw new Error('Network response was not ok');
