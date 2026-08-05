@@ -110,12 +110,6 @@ jobs:
     name: Build Package
     needs: [prepare, test-helper]
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        arch: ['epyc7002']
-        dsm: ['7.4']
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -157,67 +151,54 @@ jobs:
             exit 1
           fi
 
-      - name: Build setuid helper binary (x86_64, static)
+      # No Synology toolchain, no chroot, no Docker: nothing in this
+      # package is compiled against Synology's toolchain (the only
+      # native code is the setuid helper, built as a plain static
+      # binary), and an .spk is just a tar. See build-spk.sh's header
+      # comment, and build-test.yml which validated this same swap
+      # first. This also retires the "Add dsmappname to INFO" sed-patch
+      # step and the per-arch/dsm build matrix that existed only
+      # because the toolchain builder needed one chroot per platform -
+      # build-spk.sh writes dsmappname/ctl_stop/checksum straight from
+      # package.json in one pass, no per-platform build required.
+      - name: Build SPK
+        run: ./build-spk.sh ./dist
+
+      - name: Verify the built package
         run: |
           set -eux
-          mkdir -p ./src/bin/helper
-          SRC=./synology/helper/smartinfo-helper.c
-          gcc -O2 -static -Wall -o ./src/bin/helper/smartinfo-helper.x86_64 "$SRC"
-          chmod 0755 ./src/bin/helper/smartinfo-helper.x86_64
-          ls -la ./src/bin/helper
+          spk=$(ls ./dist/*.spk)
+          workdir=$(mktemp -d)
+          tar -xf "$spk" -C "$workdir"
 
-      - name: Synology Package Builder Github Action
-        # Forked from tomgrv/synology-package-builder@v1.3.0: upstream's
-        # docker image is missing xz-utils, so DSM7 chroot deployment
-        # (which extracts .txz toolchains) fails on every non-noarch build.
-        # See PeterSuh-Q3/synology-package-builder@fix/xz-utils-missing
-        uses: PeterSuh-Q3/synology-package-builder@fix/xz-utils-missing
-        with:
-          dsm: ${{ matrix.dsm }}
-          arch: ${{ matrix.arch }}
-          output: ./dist
-          
-      - name: Add dsmappname to INFO
-        run: |
-          for f in ./dist/*.spk; do
-            [[ "$f" == *_debug.spk ]] && continue
-            tmpdir=$(mktemp -d)
-            tar -xf "$f" -C "$tmpdir"
-            # See build-test.yml's comment: ui/config now uses the
-            # "dsm-wrapper.js" schema, not a bare .url entry.
-            APPID=$(jq -r '.["dsm-wrapper.js"] | to_entries[] | select(.value.type=="app") | .key' src/ui/config)
-            if ! grep -q "dsmappname" "$tmpdir/INFO"; then
-              sed -i "s/dsmuidir=\"ui\"/dsmuidir=\"ui\"\ndsmappname=\"$APPID\"/" "$tmpdir/INFO"
-            fi
-            # The builder's create_info() never maps package.json's
-            # ctl_stop/ctl_uninstall to INFO at all (silently dropped).
-            # ctl_stop=no removes Package Center's Start/Stop toggle -
-            # this is a per-request CGI, not a long-running daemon, so
-            # "start/stop" is meaningless; only Open + Uninstall should
-            # remain selectable after install.
-            sed -i '/^ctl_stop=/d' "$tmpdir/INFO"
-            echo 'ctl_stop="no"' >> "$tmpdir/INFO"
-            # DSM's Package Center rejects manually-installed spks with
-            # "spk is not from synology" (error 289) when INFO has no
-            # checksum field. Real Synology-toolkit-built packages always
-            # carry checksum=md5(package.tgz); compute and (re)write it.
-            sed -i '/^checksum=/d' "$tmpdir/INFO"
-            CHECKSUM=$(md5sum "$tmpdir/package.tgz" | awk '{print $1}')
-            echo "checksum=\"$CHECKSUM\"" >> "$tmpdir/INFO"
-            tar -cf "$f" -C "$tmpdir" $(ls "$tmpdir")
-            rm -rf "$tmpdir"
-          done
+          # INFO's checksum must match package.tgz, or DSM rejects the
+          # package outright with "spk is not from synology" (error 289).
+          declared=$(grep '^checksum=' "$workdir/INFO" | cut -d'"' -f2)
+          actual=$(md5sum "$workdir/package.tgz" | awk '{print $1}')
+          [ "$declared" = "$actual" ]
 
-      - name: Remove debug spk and rename package
-        run: |
-          ls -l ./dist
-          rm ./dist/*_debug.spk 2>/dev/null || true
-          ls -l ./dist
+          # dsmappname must be present, or DSM never registers the
+          # desktop app entry src/ui/config declares - the package
+          # installs fine but no icon/popup window ever appears.
+          grep -q '^dsmappname="PeterSuh.SynoSmartInfo.AppInstance"$' "$workdir/INFO"
+
+          # A missing/non-setuid helper means no privileged path at all,
+          # and privilege's "tool" section is what makes DSM apply the
+          # setuid bit at install time - so both must be present.
+          tar -tzf "$workdir/package.tgz" | grep -q 'bin/helper/smartinfo-helper'
+          grep -q '"tool"' "$workdir/conf/privilege"
+
+          # Third-party packages cannot declare run-as root anywhere in
+          # privilege (DSM rejects with error 319 at verify time).
+          ! grep -q '"run-as": *"root"' "$workdir/conf/privilege"
+
+          file "$workdir/package.tgz"
+          cat "$workdir/INFO"
 
       - name: Upload Package
         uses: actions/upload-artifact@v4
         with:
-          name: SynoSmartInfo-${{ matrix.dsm }}
+          name: SynoSmartInfo-x86_64
           path: ./dist/*.spk
 
       # workflow_dispatch always reports github.ref_type as 'branch', so
