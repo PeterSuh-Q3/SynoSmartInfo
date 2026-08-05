@@ -90,7 +90,9 @@ jobs:
             [[ "$f" == *_debug.spk ]] && continue
             tmpdir=$(mktemp -d)
             tar -xf "$f" -C "$tmpdir"
-            APPID=$(jq -r '.[] | keys[]' src/ui/config)
+            # See build-test.yml's comment: ui/config now uses the
+            # "dsm-wrapper.js" schema, not a bare .url entry.
+            APPID=$(jq -r '.["dsm-wrapper.js"] | to_entries[] | select(.value.type=="app") | .key' src/ui/config)
             if ! grep -q "dsmappname" "$tmpdir/INFO"; then
               sed -i "s/dsmuidir=\"ui\"/dsmuidir=\"ui\"\ndsmappname=\"$APPID\"/" "$tmpdir/INFO"
             fi

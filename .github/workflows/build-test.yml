@@ -121,7 +121,12 @@ jobs:
             # actually had a working popup, even though the underlying
             # mechanism (dsmuidir + dsmappname + ui/config's .url entry)
             # was already correct.
-            APPID=$(jq -r '.[] | keys[]' src/ui/config)
+            # ui/config now uses the "dsm-wrapper.js" schema (floating
+            # desktop window via SYNO.SDS.AppWindow, not a bare .url tab -
+            # see dsm-wrapper.js's header comment), which nests two
+            # classes (AppInstance, AppWindow) - dsmappname must be the
+            # AppInstance one specifically.
+            APPID=$(jq -r '.["dsm-wrapper.js"] | to_entries[] | select(.value.type=="app") | .key' src/ui/config)
             if ! grep -q "dsmappname" "$tmpdir/INFO"; then
               sed -i "s/dsmuidir=\"ui\"/dsmuidir=\"ui\"\ndsmappname=\"$APPID\"/" "$tmpdir/INFO"
             fi
