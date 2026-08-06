@@ -35,5 +35,26 @@ if grep -qi 'hypervisor' /proc/cpuinfo; then
   # exit 1
 fi
 
+# 2.0.0-2.0.4 declared conf/privilege's own "sc-synosmartinfo" user /
+# "synosmartinfo" group instead of DSM's auto-assigned package account.
+# DSM never removes these on uninstall (they're OS-level accounts, not
+# package files), and their mere presence breaks DSM's own auto-account
+# resolution for THIS package's name ("Synosmartinfo" ends up bound to
+# the leftover "synosmartinfo" group instead of getting its own) -
+# every subsequent install/upgrade then fails with error 313 "failed to
+# revise file attributes", fresh install included. Wipe them before DSM
+# gets a chance to provision anything, on every install/upgrade path.
+for cmd in synouser synogroup; do
+    [ -x "/usr/syno/sbin/$cmd" ] || echo "Warning: /usr/syno/sbin/$cmd not found, skipping legacy account cleanup"
+done
+if [ -x /usr/syno/sbin/synouser ]; then
+    /usr/syno/sbin/synouser --get sc-synosmartinfo >/dev/null 2>&1 && \
+        { echo "Removing leftover sc-synosmartinfo account from a pre-2.0.5 install..."; /usr/syno/sbin/synouser --del sc-synosmartinfo || true; }
+fi
+if [ -x /usr/syno/sbin/synogroup ]; then
+    /usr/syno/sbin/synogroup --get synosmartinfo >/dev/null 2>&1 && \
+        { echo "Removing leftover synosmartinfo group from a pre-2.0.5 install..."; /usr/syno/sbin/synogroup --del synosmartinfo || true; }
+fi
+
 echo "Pre-installation check completed."
 exit 0

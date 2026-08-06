@@ -4,5 +4,16 @@
 PKG_NAME=$(basename "$SYNOPKG_PKGDEST")
 rm -f /usr/syno/synoman/webman/3rdparty/$PKG_NAME
 
+# Best-effort: also clean the legacy sc-synosmartinfo/synosmartinfo
+# OS-level accounts here, in case the user isn't reinstalling right
+# away - preinst does the same cleanup before any future
+# install/upgrade regardless, so this isn't load-bearing, just tidy.
+if [ -x /usr/syno/sbin/synouser ]; then
+    /usr/syno/sbin/synouser --get sc-synosmartinfo >/dev/null 2>&1 && /usr/syno/sbin/synouser --del sc-synosmartinfo
+fi
+if [ -x /usr/syno/sbin/synogroup ]; then
+    /usr/syno/sbin/synogroup --get synosmartinfo >/dev/null 2>&1 && /usr/syno/sbin/synogroup --del synosmartinfo
+fi
+
 exit 0
 
