@@ -163,6 +163,19 @@ curl -fsSL https://raw.githubusercontent.com/PeterSuh-Q3/SynoSmartInfo/main/docs
 and run `sudo sh cleanup-legacy-account.sh`). Then install/upgrade normally.
 Safe to run even if you're not affected — it only reports "nothing to do."
 
+Expected output when the legacy accounts are found and removed:
+
+```
+Password:
+==> Checking for the legacy 'sc-synosmartinfo' account...
+    Found it - removing.
+    Done.
+==> Checking for the legacy 'synosmartinfo' group...
+    Found it - removing.
+    Done.
+==> Cleanup complete. You can now install or upgrade to Syno Smart Info v2.0.5+.
+```
+
 ### `error 313: failed to revise file attributes` — v1.4.2 또는 v2.0.0~v2.0.4 설치 이력이 있는 경우
 
 이 장비에 **v2.0.0~v2.0.4가 한 번이라도 설치된 적**이 있다면 — 지금은 완전히
@@ -184,6 +197,19 @@ curl -fsSL https://raw.githubusercontent.com/PeterSuh-Q3/SynoSmartInfo/main/docs
 받아서 `sudo sh cleanup-legacy-account.sh`로 실행). 이후 정상적으로
 설치/업그레이드하면 됩니다. 해당 사항이 없어도 실행하면 안전합니다 — "삭제할
 것 없음"만 출력됩니다.
+
+잔존 계정이 발견되어 정리될 때 실제로 출력되는 내용(실기 검증 완료):
+
+```
+Password:
+==> Checking for the legacy 'sc-synosmartinfo' account...
+    Found it - removing.
+    Done.
+==> Checking for the legacy 'synosmartinfo' group...
+    Found it - removing.
+    Done.
+==> Cleanup complete. You can now install or upgrade to Syno Smart Info v2.0.5+.
+```
 
 ## License
 
