@@ -45,6 +45,18 @@ b64_of() {
     else base64 < "$1" | tr -d '\n'; fi
 }
 
+# Every entry in a real Synology-built .spk is owned by root:root.
+# Without this, the archive records whoever ran the build - on CI that's
+# uid 1001 "runner", which shows up in the installed package's file
+# attributes and is visibly wrong next to any genuine package. The two
+# tar flavors spell this differently and neither accepts the other's
+# form, so pick per-flavor rather than assuming GNU.
+if tar --version 2>/dev/null | grep -qi 'gnu tar'; then
+    TAR_OWNER=(--owner=root --group=root)
+else
+    TAR_OWNER=(--uid 0 --gid 0 --uname root --gname root)
+fi
+
 PKG_NAME="$(j '.name')"
 PKG_VERSION="$(j '.version')"
 PKG_ARCH="$(j '.synology.arch')"
@@ -86,7 +98,7 @@ chmod 0755 "${STAGE}/bin/syno_smart_info.sh" 2>/dev/null || true
 
 SPK_DIR="${BUILD_DIR}/spk"
 mkdir -p "${SPK_DIR}"
-tar -czf "${SPK_DIR}/package.tgz" -C "${STAGE}" .
+tar "${TAR_OWNER[@]}" -czf "${SPK_DIR}/package.tgz" -C "${STAGE}" .
 
 # DSM shows this as the install size; it's the uncompressed target/
 # size in KB.
@@ -157,7 +169,7 @@ INFO="${SPK_DIR}/INFO"
 SPK="${OUT_DIR}/${PKG_NAME}-${PKG_ARCH:-noarch}-${PKG_VERSION}.spk"
 mkdir -p "${OUT_DIR}"
 rm -f "${SPK}"
-( cd "${SPK_DIR}" && tar -cf "${SPK}" $(ls) )
+( cd "${SPK_DIR}" && tar "${TAR_OWNER[@]}" -cf "${SPK}" $(ls) )
 
 echo "==> Built ${SPK}"
 echo "    package.tgz md5 : ${CHECKSUM}"
