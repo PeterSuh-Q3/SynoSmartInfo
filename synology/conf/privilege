@@ -1,7 +1,5 @@
 {
   "defaults": { "run-as": "package" },
-  "username": "sc-synosmartinfo",
-  "groupname": "synosmartinfo",
   "tool": [
     {
       "relpath": "bin/helper/smartinfo-helper.x86_64",
