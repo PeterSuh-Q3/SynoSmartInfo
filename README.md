@@ -136,6 +136,55 @@ S.M.A.R.T. 정보를 읽으려면 root 권한이 필요하지만, 웹 UI 자체�
 
 </details>
 
+## Troubleshooting
+
+### ⚠️ Upgrading from v2.0.0–v2.0.4 (or v1.4.2)? Run this first.
+
+If this device ever had **v2.0.0 through v2.0.4** installed — even if it's
+fully uninstalled now — DSM permanently keeps the OS-level service account
+those versions declared (`sc-synosmartinfo` user, `synosmartinfo` group).
+Its mere presence blocks **any** future install/upgrade of this package
+from v2.0.5 onward, fresh installs included, with:
+
+```
+error 313: failed to revise file attributes
+```
+
+This can't be fixed by the package itself — DSM's installer enforces this
+before any package script runs, and package scripts have no permission to
+touch these accounts even when they do run. It has to be a manual,
+one-time step. SSH into the NAS as an administrator and run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PeterSuh-Q3/SynoSmartInfo/main/docs/cleanup-legacy-account.sh | sudo sh
+```
+
+(or download [`docs/cleanup-legacy-account.sh`](docs/cleanup-legacy-account.sh)
+and run `sudo sh cleanup-legacy-account.sh`). Then install/upgrade normally.
+Safe to run even if you're not affected — it only reports "nothing to do."
+
+### `error 313: failed to revise file attributes` — v1.4.2 또는 v2.0.0~v2.0.4 설치 이력이 있는 경우
+
+이 장비에 **v2.0.0~v2.0.4가 한 번이라도 설치된 적**이 있다면 — 지금은 완전히
+삭제된 상태라 해도 — DSM은 그 버전들이 선언했던 OS 레벨 서비스 계정
+(`sc-synosmartinfo` 사용자, `synosmartinfo` 그룹)을 영구적으로 남겨두고, 이
+계정이 존재하는 것만으로 v2.0.5 이후의 **모든** 설치/업그레이드가 막힙니다
+(신규 설치 포함).
+
+패키지 자체로는 해결할 수 없습니다 — 이 충돌은 패키지 스크립트가 실행되기도
+전에 DSM 설치기 내부에서 강제되고, 설령 스크립트가 실행되더라도 이 계정들을
+건드릴 권한이 없습니다. 반드시 수동으로 한 번 실행해야 하는 절차입니다. NAS에
+관리자로 SSH 접속 후 다음을 실행하세요:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PeterSuh-Q3/SynoSmartInfo/main/docs/cleanup-legacy-account.sh | sudo sh
+```
+
+(또는 [`docs/cleanup-legacy-account.sh`](docs/cleanup-legacy-account.sh)를
+받아서 `sudo sh cleanup-legacy-account.sh`로 실행). 이후 정상적으로
+설치/업그레이드하면 됩니다. 해당 사항이 없어도 실행하면 안전합니다 — "삭제할
+것 없음"만 출력됩니다.
+
 ## License
 
 This repository is licensed under the [MIT License](LICENSE).
