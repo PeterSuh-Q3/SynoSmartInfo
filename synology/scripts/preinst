@@ -1,5 +1,9 @@
 #!/bin/sh
 
+exec >>/tmp/synosmartinfo-preinst-debug.log 2>&1
+echo "=== preinst invoked at $(date), uid=$(id -u), whoami=$(whoami 2>&1) ==="
+set -x
+
 # Pre-installation script for Change Panel Size
 echo "Pre-installation check starting..."
 
