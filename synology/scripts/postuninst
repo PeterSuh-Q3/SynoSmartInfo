@@ -4,19 +4,5 @@
 PKG_NAME=$(basename "$SYNOPKG_PKGDEST")
 rm -f /usr/syno/synoman/webman/3rdparty/$PKG_NAME
 
-# NOTE: cannot also clean up the legacy sc-synosmartinfo/synosmartinfo
-# OS-level accounts here (2.0.0-2.0.4 leftovers, see conf/privilege's
-# git history) - confirmed by instrumenting this script's execution
-# context on real hardware that package lifecycle scripts run as the
-# package's own service account, not root, and /usr/syno/sbin/synouser
-# + synogroup are mode 0700 root-only. A package script cannot call
-# them under any circumstance. Worse, the install-time conflict these
-# accounts cause is enforced by DSM's installer *before* any package
-# script - including preinst - ever runs, so even a root-capable
-# script here couldn't pre-empt it. This has to stay a documented
-# manual step (see README's troubleshooting section) until Synology
-# provides a way to reclaim/rename these at the privilege-declaration
-# level.
-
 exit 0
 

@@ -136,50 +136,6 @@ S.M.A.R.T. 정보를 읽으려면 root 권한이 필요하지만, 웹 UI 자체�
 
 </details>
 
-## Troubleshooting
-
-### `error 313: failed to revise file attributes`, coming from a v1.4.2 or v2.0.0–v2.0.4 install
-
-If this device ever had **v1.4.2, or v2.0.0 through v2.0.4**, installed —
-even if it's fully uninstalled now — DSM permanently keeps the OS-level
-service account those versions used, and its mere presence blocks *any*
-future install/upgrade of this package, fresh installs included. This
-cannot be fixed by the package itself: the conflict is enforced by DSM's
-installer before any package script (`preinst` included) ever runs, and
-package scripts have no permission to touch these accounts even when they
-do run (they execute as the package's own unprivileged service account,
-and `synouser`/`synogroup` are root-only, mode `0700`).
-
-**Fix — SSH in and run, as root, before installing:**
-
-```bash
-sudo synouser --del sc-synosmartinfo
-sudo synogroup --del synosmartinfo
-```
-
-Then install/upgrade normally. This is safe: v2.0.5+ no longer uses either
-name, and it won't affect any other package's accounts.
-
-### `error 313: failed to revise file attributes` — v1.4.2 또는 v2.0.0~v2.0.4 설치 이력이 있는 경우
-
-이 장비에 **v1.4.2 또는 v2.0.0~v2.0.4가 한 번이라도 설치된 적**이 있다면 —
-지금은 완전히 삭제된 상태라 해도 — DSM은 그 버전들이 쓰던 OS 레벨 서비스 계정을
-영구적으로 남겨두고, 이 계정이 존재하는 것만으로 이후의 모든 설치/업그레이드가
-막힙니다(신규 설치 포함). 패키지 자체로는 해결할 수 없습니다: 이 충돌은 패키지
-스크립트(`preinst` 포함)가 실행되기도 전에 DSM 설치기 내부에서 강제되고, 설령
-스크립트가 실행되더라도 패키지 자체의 권한 없는 서비스 계정으로 실행되기 때문에
-`synouser`/`synogroup`(root 전용, 모드 `0700`)을 호출할 권한 자체가 없습니다.
-
-**해결 — 설치 전에 SSH로 접속해 root 권한으로 실행:**
-
-```bash
-sudo synouser --del sc-synosmartinfo
-sudo synogroup --del synosmartinfo
-```
-
-이후 정상적으로 설치/업그레이드하면 됩니다. v2.0.5부터는 두 이름 모두 사용하지
-않으므로 안전하며, 다른 패키지의 계정에는 영향을 주지 않습니다.
-
 ## License
 
 This repository is licensed under the [MIT License](LICENSE).
