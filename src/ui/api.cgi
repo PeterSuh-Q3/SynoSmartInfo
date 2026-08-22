@@ -48,7 +48,22 @@ echo "" # 헤더/바디 구분 빈줄
 # 아무것도 출력하지 않는다.
 AUTH_USER="$(/usr/syno/synoman/webman/modules/authenticate.cgi 2>/dev/null)"
 if [ -z "${AUTH_USER}" ]; then
-    log "[SECURITY] rejected unauthenticated request from ${REMOTE_ADDR:-unknown}"
+    # 쿠키 값 자체(SID 토큰)는 절대 기록하지 않는다 - 유무/개수만 남겨서
+    # "정상 로그인했는데도 unauthorized" 리포트가 리버스 프록시/HTTP vs
+    # HTTPS/쿠키 차단 중 무엇 때문인지 다음부터는 로그만으로 구분 가능하게 한다.
+    COOKIE_COUNT=0
+    HAS_ID_COOKIE="no"
+    if [ -n "${HTTP_COOKIE:-}" ]; then
+        COOKIE_COUNT=$(( $(grep -o ';' <<< "${HTTP_COOKIE}" | wc -l) + 1 ))
+        [[ "${HTTP_COOKIE}" == *"id="* ]] && HAS_ID_COOKIE="yes"
+    fi
+    MSG="[SECURITY] rejected unauthenticated request from ${REMOTE_ADDR:-unknown}"
+    MSG+=" host=${HTTP_HOST:-unknown} uri=${REQUEST_URI:-unknown}"
+    MSG+=" scheme=${HTTPS:+https}${HTTPS:-http} xfwd_for=${HTTP_X_FORWARDED_FOR:-none}"
+    MSG+=" xfwd_proto=${HTTP_X_FORWARDED_PROTO:-none} referer=${HTTP_REFERER:-none}"
+    MSG+=" cookie_present=$([ -n "${HTTP_COOKIE:-}" ] && echo yes || echo no)"
+    MSG+=" cookie_count=${COOKIE_COUNT} has_id_cookie=${HAS_ID_COOKIE}"
+    log "${MSG}"
     echo '{"success":false,"message":"unauthorized - sign in to DSM first","result":null}'
     exit 0
 fi
