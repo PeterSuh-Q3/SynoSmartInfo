@@ -2,18 +2,6 @@
   "defaults": { "run-as": "package" },
   "tool": [
     {
-      "relpath": "bin",
-      "user": "root",
-      "group": "package",
-      "permission": "0555"
-    },
-    {
-      "relpath": "bin/helper",
-      "user": "root",
-      "group": "package",
-      "permission": "0555"
-    },
-    {
       "relpath": "bin/syno_smart_info.sh",
       "user": "root",
       "group": "package",
