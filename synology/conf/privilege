@@ -2,12 +2,6 @@
   "defaults": { "run-as": "package" },
   "tool": [
     {
-      "relpath": ".",
-      "user": "root",
-      "group": "package",
-      "permission": "0555"
-    },
-    {
       "relpath": "bin",
       "user": "root",
       "group": "package",
