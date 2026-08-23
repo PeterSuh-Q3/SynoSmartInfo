@@ -63,8 +63,17 @@ static void heal_dir(const char *path)
 int main(int argc, char *argv[])
 {
     /* Must match syno_smart_info.sh's actual accepted options exactly;
-     * "-i" was never a real option upstream and always failed. */
-    const char *allowed[] = { "", "-a", "-v", "-h", NULL };
+     * "-i" was never a real option upstream and always failed.
+     * "selfheal" is not a script option at all - it's caught below,
+     * before exec, and only re-locks BIN_DIR/HELPER_DIR then exits.
+     * postinst/postupgrade call this once, immediately after install,
+     * to close the window between "package installed" and "a real
+     * SMART check first runs" during which bin/ is still owned by the
+     * service account (conf/privilege can't chown directories - see
+     * heal_dir()'s comment) and a compromised service-account process
+     * could delete+recreate syno_smart_info.sh before heal_dir() ever
+     * gets a chance to run. Reported by 007revad, issue #21. */
+    const char *allowed[] = { "", "-a", "-v", "-h", "selfheal", NULL };
     const char *opt = (argc >= 2) ? argv[1] : "";
 
     if (argc > 2) {
@@ -92,6 +101,10 @@ int main(int argc, char *argv[])
      * our newly-acquired root. See heal_dir()'s comment for why. */
     heal_dir(BIN_DIR);
     heal_dir(HELPER_DIR);
+
+    if (strcmp(opt, "selfheal") == 0) {
+        return 0;
+    }
 
     /* Sanitize environment: fixed PATH, no inherited surprises. */
     if (clearenv() != 0) {

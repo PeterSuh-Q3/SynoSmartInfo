@@ -172,6 +172,36 @@ done
 inf "STEP 5 done"
 
 # ─────────────────────────────────────────────────────────────────────────
+# STEP 6: force self-heal now, don't wait for the first real SMART check
+#
+# heal_dir() inside the helper re-locks bin/ and bin/helper/ to root
+# ownership on every invocation - but only ON invocation. conf/privilege
+# can only chown FILES (see STEP 2's comment), so both directories start
+# out owned by this same non-root service account this script is running
+# as. Between "install/upgrade just finished" and "a user's first real
+# SMART check", nothing forced or verified that heal - a compromised
+# service-account process had a real window to delete+recreate
+# syno_smart_info.sh with attacker content, which would then run as root
+# the next time a legitimate check happened to trigger the heal.
+# (Reported by 007revad, issue #21, with a working exploit reproduction.)
+#
+# This script itself is non-root (run-as=package), but the helper is
+# ALREADY root-owned+setuid by this point - DSM applies conf/privilege's
+# "tool" section before postinst ever runs, confirmed by STEP 2's own
+# check above. So this script can't chown anything directly, but it CAN
+# invoke the already-privileged helper to do it, closing the window
+# immediately instead of waiting on user activity.
+inf "--- STEP 6: Force self-heal (close the install-to-first-check window) ---"
+if [ -u "$HELPER" ]; then
+  "$HELPER" selfheal 2>&1; rc=$?
+  dbg "$HELPER selfheal rc=$rc"
+  [ $rc -ne 0 ] && wrn "selfheal exited non-zero (rc=$rc) - bin/ ownership may still need a real SMART check to repair"
+else
+  wrn "Helper not setuid yet - cannot force self-heal (will still self-heal on first real SMART check)"
+fi
+inf "STEP 6 done"
+
+# ─────────────────────────────────────────────────────────────────────────
 # FINAL
 # ─────────────────────────────────────────────────────────────────────────
 inf "=== POST-INSTALL COMPLETE: FAIL_COUNT=$FAIL ==="
