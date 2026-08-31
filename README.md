@@ -1,5 +1,7 @@
 <!-- @format -->
 
+[![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/PeterSuhQ3)
+
 [![](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/PeterSuh-Q3)
 [![GitHub release](https://img.shields.io/github/release/PeterSuh-Q3/SynoSmartInfo?include_prereleases=&sort=semver&color=blue)](https://github.com/PeterSuh-Q3/SynoSmartInfo/releases/)
 [![License](https://img.shields.io/badge/License-MIT-blue)](#license)
