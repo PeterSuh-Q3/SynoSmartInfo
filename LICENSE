@@ -1,21 +1,291 @@
-MIT License
+PeterSuh-Q3 Non-Commercial Source-Available License
 
-Copyright (c) 2025 github.com/PeterSuh-Q3
+Copyright (C) 2022-2026 PeterSuh-Q3
+https://github.com/PeterSuh-Q3
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Version 1.0
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+IMPORTANT NOTICE
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+This software is provided as source-available software. It is not
+licensed under an OSI-approved open-source license.
+
+This license permits personal and non-commercial use only. Commercial
+use requires prior written permission from the copyright holder.
+
+1. Definitions
+
+For the purposes of this License:
+
+"Software" means the source code, scripts, configuration files,
+documentation, build files, release files, and other materials
+distributed by PeterSuh-Q3 under this License.
+
+"Modified Version" means any work based on, incorporating, translating,
+adapting, or modifying all or a substantial portion of the Software.
+
+"Commercial Use" means any use that is primarily intended for or
+directed toward commercial advantage, commercial activity, monetary
+compensation, or business benefit.
+
+Commercial Use includes, without limitation:
+
+a. selling, licensing, leasing, renting, or otherwise transferring the
+   Software or a Modified Version for compensation;
+
+b. distributing the Software or a Modified Version as part of a paid
+   product, paid package, paid image, paid installer, or commercial
+   hardware product;
+
+c. providing paid installation, deployment, configuration, consulting,
+   maintenance, support, repair, hosting, or managed services based on
+   the Software;
+
+d. using the Software or a Modified Version in the operation of a
+   commercial service, business, organization, or revenue-generating
+   infrastructure;
+
+e. bundling the Software with a commercial product, subscription,
+   advertisement, service, or support contract;
+
+f. using the Software to provide a commercial NAS, storage, hosting,
+   virtualization, backup, media-server, or similar service;
+
+g. distributing a preconfigured or modified installation image for
+   commercial purposes; or
+
+h. using the Software to obtain commercial revenue or a commercial
+   advantage.
+
+"Non-Commercial Use" means personal, educational, research, testing,
+evaluation, hobby, or non-profit use that is not Commercial Use.
+
+2. Grant of Non-Commercial Permission
+
+Subject to the terms of this License, PeterSuh-Q3 grants you a
+worldwide, non-exclusive, non-transferable, royalty-free license to:
+
+a. use the Software for Non-Commercial Use;
+
+b. copy the Software for Non-Commercial Use;
+
+c. study and modify the Software for Non-Commercial Use; and
+
+d. distribute the Software or a Modified Version for Non-Commercial Use.
+
+This permission does not include Commercial Use.
+
+3. Commercial Use Requires Permission
+
+You must obtain prior written permission from PeterSuh-Q3 before
+engaging in any Commercial Use.
+
+A separate commercial license may be granted at the sole discretion of
+the copyright holder. No commercial license is granted by merely
+downloading, accessing, copying, modifying, or contributing to the
+Software.
+
+Requests for commercial licensing should identify:
+
+a. the person or organization requesting the license;
+
+b. the Software and version to be used;
+
+c. the intended product, service, or distribution method;
+
+d. the countries or markets involved; and
+
+e. whether the Software will be modified or combined with other works.
+
+4. Attribution and Notices
+
+If you copy, modify, or distribute the Software or a Modified Version
+for Non-Commercial Use, you must:
+
+a. retain this License;
+
+b. retain all existing copyright, authorship, attribution, and license
+   notices;
+
+c. clearly identify any files or portions that you modified;
+
+d. state the date and general nature of your modifications where
+   reasonably practicable;
+
+e. preserve the original project and copyright information; and
+
+f. not remove or conceal the source of the Software.
+
+A suitable notice may be written as follows:
+
+"This work is based on software developed by PeterSuh-Q3:
+https://github.com/PeterSuh-Q3"
+
+You must not represent a Modified Version as an official release of
+PeterSuh-Q3.
+
+5. Distribution of Modified Versions
+
+You may distribute a Modified Version only for Non-Commercial Use and
+only if:
+
+a. the Modified Version is clearly identified as modified;
+
+b. the original project name, copyright notices, and license notices
+   are preserved where applicable;
+
+c. the applicable source code is made available to recipients under
+   this License or under the applicable license of the original
+   component;
+
+d. no additional term contradicts or removes the permissions granted by
+   this License; and
+
+e. the Modified Version does not falsely imply endorsement,
+   sponsorship, authorization, or official support by PeterSuh-Q3.
+
+6. Third-Party Components
+
+The Software may include or depend on components created by third
+parties.
+
+Third-party components remain subject to their original copyright
+notices and licenses. Nothing in this License grants permission to
+relicense, restrict, or remove rights granted by a third-party license.
+
+If a component is distributed under the GNU General Public License,
+Apache License, MIT License, BSD License, or another license, that
+component must continue to be distributed in accordance with its
+applicable license.
+
+This License does not override or restrict rights that you receive
+directly from a third-party license.
+
+7. Separation of Independently Licensed Components
+
+Code that is not derived from or combined with the Software may be
+distributed under a separate license.
+
+However, placing files in a separate directory, repository, package, or
+archive does not by itself establish that the files are independent
+works. The applicable license depends on the actual technical and
+copyright relationship between the components.
+
+8. Synology and DSM Disclaimer
+
+This Software is independent of Synology Inc.
+
+"Synology" and "DSM" are trademarks, products, or intellectual property
+of Synology Inc. This License does not grant any license, permission,
+authorization, or right to use:
+
+a. Synology DSM software;
+
+b. Synology firmware, binaries, keys, signatures, certificates, or
+   proprietary files;
+
+c. Synology trademarks, logos, product names, or branding; or
+
+d. any Synology intellectual property.
+
+This Software does not represent an official Synology product, service,
+installer, recovery tool, support tool, or release.
+
+You are solely responsible for complying with the applicable Synology
+End User License Agreement, terms of service, copyright law, trademark
+law, export-control law, and all other applicable laws and agreements.
+
+You must not distribute Synology DSM or Synology proprietary materials
+unless you have a separate legal right to do so.
+
+9. Use with Non-Official or Modified Systems
+
+This License does not authorize the installation, operation, use, or
+distribution of Synology DSM on hardware or systems not authorized by
+Synology.
+
+This Software is provided only as an independent technical tool for
+personal and non-commercial use. You are responsible for determining
+whether your intended use complies with the applicable DSM license and
+other legal requirements.
+
+10. No Endorsement or Official Status
+
+You must not:
+
+a. use the name "PeterSuh-Q3" in a manner that implies endorsement,
+   sponsorship, maintenance, or official approval;
+
+b. use PeterSuh-Q3 project names, logos, badges, or branding to make a
+   Modified Version appear to be an official release;
+
+c. publish a Modified Version using a confusingly similar project name;
+   or
+
+d. claim that Synology Inc. or PeterSuh-Q3 supports, certifies, or
+   authorizes your distribution.
+
+11. Contributions
+
+Unless a separate written agreement states otherwise, contributions
+submitted to this project are provided under the same license as the
+part of the project to which they are submitted.
+
+By submitting a contribution, you represent that:
+
+a. you have the right to submit the contribution;
+
+b. the contribution does not knowingly violate a third party's rights;
+   and
+
+c. you understand that the contribution may be distributed under this
+   License or the applicable license of the relevant component.
+
+12. Termination
+
+Your rights under this License terminate automatically if you violate
+any term of this License.
+
+Upon termination, you must stop using, copying, modifying, and
+distributing the Software, except to the extent that applicable law or
+a separate license grants you such rights.
+
+Rights granted by applicable third-party licenses are not terminated by
+this section.
+
+13. No Warranty
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND
+NON-INFRINGEMENT.
+
+14. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, PETER SUH-Q3 AND
+ALL CONTRIBUTORS SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, CONSEQUENTIAL, OR OTHER DAMAGES,
+INCLUDING LOSS OF DATA, LOSS OF PROFITS, BUSINESS INTERRUPTION, OR
+SYSTEM DAMAGE, ARISING OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+THE USE OR INABILITY TO USE THE SOFTWARE.
+
+15. Governing Law and Jurisdiction
+
+This License shall be interpreted in accordance with the laws applicable
+to the copyright holder and the relevant use, distribution, or
+infringement, without prejudice to mandatory rights under applicable
+law.
+
+Nothing in this section limits any mandatory rights or remedies that
+cannot lawfully be waived.
+
+16. Contact
+
+Copyright holder:
+PeterSuh-Q3
+
+Project:
+https://github.com/PeterSuh-Q3
+
+For commercial licensing or other permissions, contact the copyright
+holder through the official project repository.
