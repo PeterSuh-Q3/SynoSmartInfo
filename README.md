@@ -1,5 +1,9 @@
 <!-- @format -->
 
+> **DSM Package Center source:** Add [https://nas.dante90.mmv.kr/](https://nas.dante90.mmv.kr/) in **Package Center → Settings → Package Sources** to browse compatible PeterSuh-Q3 packages.
+
+[![English DSM Package Center Community catalog showing PeterSuh-Q3 packages](docs/package-center-community-en.png)](https://nas.dante90.mmv.kr/)
+
 [![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/PeterSuhQ3)
 
 [![](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/PeterSuh-Q3)
