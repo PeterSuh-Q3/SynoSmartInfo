@@ -22,7 +22,7 @@ on:
 jobs:
   prepare:
     name: Prepare Release Tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       new_tag: ${{ steps.get_latest_tag.outputs.new_tag }}
     steps:
@@ -45,7 +45,7 @@ jobs:
 
   test-helper:
     name: Compile & functional-test setuid helper
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,14 +54,14 @@ jobs:
         run: |
           set -eux
           mkdir -p /tmp/build
-          gcc -O2 -static -Wall -Wextra -o /tmp/build/smartinfo-helper.x86_64 \
+          gcc -O2 -march=x86-64 -mtune=generic -static -Wall -Wextra -o /tmp/build/smartinfo-helper.x86_64 \
             synology/helper/smartinfo-helper.c
           file /tmp/build/smartinfo-helper.x86_64
 
       - name: Compile test helper (target overridden to /usr/bin/id)
         run: |
           set -eux
-          gcc -O2 -Wall -Wextra -DTARGET_SCRIPT='"/usr/bin/id"' \
+          gcc -O2 -march=x86-64 -mtune=generic -Wall -Wextra -DTARGET_SCRIPT='"/usr/bin/id"' \
             -o /tmp/build/smartinfo-helper-test synology/helper/smartinfo-helper.c
 
       - name: Install setuid bit on test helper (root, same as postinst does)
@@ -109,7 +109,7 @@ jobs:
   build-spk:
     name: Build Package
     needs: [prepare, test-helper]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4

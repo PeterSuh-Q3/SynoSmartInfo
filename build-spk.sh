@@ -80,7 +80,7 @@ if [ "${SKIP_HELPER:-0}" = "1" ]; then
 elif [ -f "${HELPER_SRC}" ]; then
     echo "==> Compiling setuid helper"
     mkdir -p "${ROOT}/src/bin/helper"
-    gcc -O2 -static -Wall -Wextra \
+    gcc -O2 -march=x86-64 -mtune=generic -static -Wall -Wextra \
         -o "${ROOT}/src/bin/helper/smartinfo-helper.x86_64" "${HELPER_SRC}"
     chmod 0755 "${ROOT}/src/bin/helper/smartinfo-helper.x86_64"
 fi
